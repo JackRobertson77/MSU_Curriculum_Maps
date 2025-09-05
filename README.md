@@ -1,4 +1,4 @@
-# Curriculum Mapping and Dependency Visualization  
+# MSU Curriculum Mapping and Dependency Visualization  
 *Data Cleaning and Graph Construction*  
 
 ---
