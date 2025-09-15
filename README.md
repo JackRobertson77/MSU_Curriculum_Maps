@@ -1,5 +1,6 @@
 # MSU Curriculum Mapping and Dependency Visualization  
-*Data Cleaning and Graph Construction*  
+*Data Cleaning and Graph Construction* 
+*Jack Robertson, Lauryn Crandall, Livia Perelli, James Restaneo*
 
 ---
 
