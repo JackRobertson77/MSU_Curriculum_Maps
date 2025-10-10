@@ -30,7 +30,7 @@ These are synthetic test datasets that match the expected column structure of th
 ## 4. Run the Example
    
 ```python
-python build_curriculum_map.py \
+python cleaning_data.py \
   --registrar Fake_registrar.csv \
   --majors Fake_majors.csv \
   --out curriculum_table.csv
