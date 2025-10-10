@@ -30,7 +30,7 @@ These are synthetic test datasets that match the expected column structure of th
 ## 4. Run the Example
    
 ```python
-python cleaning_data.py \
+python clean_data.py \
   --registrar Fake_registrar.csv \
   --majors Fake_majors.csv \
   --out curriculum_table.csv
@@ -46,8 +46,9 @@ Prerequisite relationships and course mappings are parsed.
 A cleaned/merged output is produced (per your script’s logic).
 
 ## Recommended Project Structure
+```bash
 project-root/
-├── build_curriculum_map.py
+├── cleaning_data.py
 ├── Fake_registrar.csv
 ├── Fake_majors.csv
 ├── requirements.txt
