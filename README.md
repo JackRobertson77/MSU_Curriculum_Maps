@@ -4,12 +4,12 @@
 
 ---
 
-## 📘 Project Overview  
+## Project Overview  
 This project develops a robust and reusable system for **parsing, cleaning, and visualizing course dependency data** at Michigan State University. The work focuses on transforming messy course prerequisite/co-requisite data into a **directed graph**, enabling analysis of curriculum structure and student pathways.  
 
 ---
 
-## 🎯 Goals  
+## Goals  
 - Clean and standardize course requirement data.  
 - Parse and interpret prerequisite logic.  
 - Construct a directed graph of course/program dependencies.  
@@ -18,7 +18,7 @@ This project develops a robust and reusable system for **parsing, cleaning, and 
 
 ---
 
-## 🔍 Research Questions  
+## Research Questions  
 - How can we reliably extract structured prerequisite relationships from messy data?  
 - What does the curriculum structure look like as a dependency graph?  
 - Which courses serve as bottlenecks or critical paths?  
@@ -26,20 +26,20 @@ This project develops a robust and reusable system for **parsing, cleaning, and 
 
 ---
 
-## 📊 Data  
+## Data  
 - **Primary source:** University academic programs and course requirements dataset.  
 - **Supplementary source:** [MSU Course Catalog](https://reg.msu.edu/courses/search.aspx) for prerequisites and co-requisites.  
 
 ---
 
-## 🛠️ Tools & Technologies  
+## Tools & Technologies  
 - **Language:** Python  
 - **Libraries:** `pandas`, `networkx`, `matplotlib`, `plotly`, `re` (regular expressions)  
 - **Workflow:** Jupyter Notebooks  
 
 ---
 
-## 📦 Deliverables  
+## Deliverables  
 - Cleaned & structured dataset  
 - Python scripts for parsing and graph construction  
 - Visualizations of curriculum structure (static + interactive)  
@@ -48,22 +48,22 @@ This project develops a robust and reusable system for **parsing, cleaning, and 
 
 ---
 
-## ⚠️ Risks & Backup Plan  
+## Risks & Backup Plan  
 - **Challenge:** Input data may be inconsistent or incomplete.  
 - **Fallback:** Develop **semi-automated tools** to support manual cleanup.  
 - Note: The project is a **prototype/analysis pipeline**, not production-ready software.  
 
 ---
 
-## 👥 Community Partner  
+## Community Partner  
 - **Sponsor:** Michigan State University academic unit
   
 ---
 
-## 📽️Project Plan Video
+## Project Plan Video
 Here is the link to our project plan video: https://mediaspace.msu.edu/media/MSU_Curriculum-CMSE495_Plan_Presentation_Video/1_ugrk2r6p
 
 ---
 
-## 📄 License  
+## License  
 This project is licensed under the [MIT License](LICENSE.txt).  
