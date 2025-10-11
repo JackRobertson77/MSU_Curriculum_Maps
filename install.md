@@ -87,3 +87,82 @@ project-root/
 ├── Fake_majors.csv
 ├── requirements.txt
 └── README.md
+```
+
+
+
+# Testing the Installations
+
+---
+
+## 1) Verify Python is available
+Run in a terminal from the project root:
+```bash
+python --version
+```
+
+**Pass:** command prints a Python 3.x version and exits without error.
+
+---
+
+## 2) Confirm example data is present
+The test uses the two fake CSVs referenced in the install file.
+
+```bash
+python - << 'PY'
+import os
+files = ["Fake_registrar.csv", "Fake_majors.csv"]
+for f in files:
+    print(f"{f} exists:", os.path.exists(f))
+    if os.path.exists(f):
+        print(f"  size (bytes):", os.path.getsize(f))
+PY
+```
+
+**Pass:** both files report `exists: True` and non‑zero size.
+
+---
+
+## 3) Run the example pipeline
+
+```bash
+# If your repo uses `clean_data.py`:
+python clean_data.py --registrar Fake_registrar.csv --majors Fake_majors.csv --out curriculum_table.csv
+
+```
+
+**Pass:** returns to the prompt without a Python traceback.
+
+---
+
+## 4) Validate the output
+Check that the output CSV was created, is non‑empty, and preview a few rows **without requiring pandas**.
+
+```bash
+python - << 'PY'
+import os, csv, itertools
+p = "curriculum_table.csv"
+print(p, "exists:", os.path.exists(p))
+if os.path.exists(p):
+    sz = os.path.getsize(p)
+    print(p, "size (bytes):", sz)
+    with open(p, newline="", encoding="utf-8", errors="replace") as fh:
+        r = csv.reader(fh)
+        rows = list(itertools.islice(r, 10))
+    print("Preview (first up to 10 rows):")
+    for row in rows:
+        print(row)
+PY
+```
+
+**Pass:** `curriculum_table.csv` exists, size > 0, and the preview prints rows.
+
+---
+
+## 5) Quick troubleshooting (minimal)
+- Make sure you’re in the project root (the same folder as the script and fake CSVs).
+- If imports fail when running the script, ensure you completed the install steps and, if applicable, run:
+  ```bash
+  pip install -r requirements.txt
+  ```
+- Re‑run steps **2–4** after fixing any issues.
