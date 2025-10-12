@@ -60,7 +60,7 @@ For either OS, you will know the Virtual Environment is active when you see (ven
 
 ## 6. Add Example Data
 
-Place the example data files in the project root (same folder as cleaning.py):
+Place the example data files in the project root (same folder as clean_data.py):
 
 Fake_registrar.csv
 
