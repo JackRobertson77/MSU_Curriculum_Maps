@@ -4,20 +4,20 @@
 
 ## 1. Install Python
 
-```python
-Visit https://www.python.org/downloads/
-The website will recognize your operating system automatically.
-Click the link to "get the standalone installer for Python 3.x.x"
-Once downloaded,
-   If you're on a windows machine:
-      Run installer executable file.
-      Check the box that says "Add Python3.x to PATH"
-      Click "Install Now"
-   If you're on a Mac Machine:
-      Open the .pkg file and follow the prompts.
+
+Visit https://www.python.org/downloads/  
+The website will recognize your operating system automatically.  
+Click the link to "get the standalone installer for Python 3.x.x"  
+Once downloaded,  
+ - If you're on a windows machine:  
+    - Run installer executable file.  
+    - Check the box that says "Add Python3.x to PATH"  
+    - Click "Install Now"  
+ - If you're on a Mac Machine:  
+    - Open the .pkg file and follow the prompts.  
 
 
-```
+
 ## 2. Install Git
 Visit https://git-scm.com/downloads  
 Find the correct version for your operating system, and click download.  
@@ -34,21 +34,28 @@ pip install networkx
 
 ## 4. Clone the Repository
 
-```bash
+
 In your command line terminal, run the following command:
+```bash
 git clone https://github.com/JackRobertson77/MSU_Curriculum_Maps.git
 cd MSU_Curriculum_Maps
 ```
 ## 5. Create Virtual Environment
 Open a command line terminal, and run the following command:  
-python3 -m venv venv  
+```bash
+python3 -m venv venv
+``` 
 Next, activate the virtual environment.  
-If you're using a Windows machine:  
-   In your terminal, run the following command:  
+ - If you're using a Windows machine:  
+    - In your terminal, run the following command:
+      ```bash  
       venv\Scripts\activate
-If you're using a Mac machine:  
-   In your terminal, run the following command:  
+      ```
+ - If you're using a Mac machine:  
+    - In your terminal, run the following command:
+      ```bash 
       source venv/bin/activate
+      ```
 For either OS, you will know the Virtual Environment is active when you see (venv) in your terminal prompt. 
 
 ## 6. Add Example Data
