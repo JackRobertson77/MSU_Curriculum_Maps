@@ -29,8 +29,10 @@ The libraries we used for this project include:
 NetworkX  
 Pandas  
 Open a command line terminal and run the following commands:  
+```bash
 pip install pandas  
 pip install networkx
+```
 
 ## 4. Clone the Repository
 
