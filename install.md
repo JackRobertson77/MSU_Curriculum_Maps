@@ -89,7 +89,7 @@ A cleaned/merged output is produced (per your script’s logic).
 ## Recommended Project Structure
 ```bash
 project-root/
-├── cleaning_data.py
+├── clean_data.py
 ├── Fake_registrar.csv
 ├── Fake_majors.csv
 ├── requirements.txt
