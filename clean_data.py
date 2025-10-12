@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-
+import os
 import argparse
 import re
 from collections import defaultdict, deque
@@ -13,8 +12,12 @@ def read_registrar_csv(path: str) -> pd.DataFrame:
         return pd.read_csv(path, encoding="utf-8", errors="replace")
 
 def read_majors_excel(path: str) -> pd.DataFrame:
-    """Reads the majors Excel spreadsheet (the curriculum plan file)"""
-    return pd.read_excel(path, sheet_name="Sheet1")
+    ext = os.path.splitext(path)[1].lower()
+    if ext == ".csv":
+        return pd.read_csv(path)
+    else:
+        return pd.read_excel(path, sheet_name="Sheet1", engine="openpyxl")
+
 
 def make_course_id(subj: str, code: str) -> str:
     """Combines subject and course code into a standard format like "CSE 331"""
@@ -88,85 +91,81 @@ def extract_major_curriculum_structure(majors_df: pd.DataFrame) -> pd.DataFrame:
     return curriculum_structure
 
 def extract_prereq_groups(registrar_df: pd.DataFrame) -> dict[str, list[set[str]]]:
-    """Builds prerequisite relationships from registrar data, preserving AND/OR logic."""
+    """Builds prerequisite relationships from registrar data, preserving AND/OR logic.
+    This is the core logic parser for prerequisites.
+    The registrar file lists rules like “CSE 232 AND CSE 260” or “MTH 103 OR MTH 116”.
+    This function:
+
+    Groups data by course and requirement group.
+
+    Detects “PRE” or “PREREQUISITE” rows.
+
+    Extracts all course IDs that are required.
+
+    Keeps them grouped in sets: each set is an AND group, and multiple sets mean OR options."""
+    
     prereq_groups = defaultdict(list)
     code_pat = re.compile(r"\b([A-Z]{2,4})\s*(\d{2,4}[A-Z]?)\b")
     
-    print("Debug: Starting prerequisite extraction...")
+    # Group by course and requirement group to understand the logic
+    for course_id, group in registrar_df.groupby(["SUBJECT", "CRSE_CODE"]):
+        target = make_course_id(course_id[0], course_id[1])
+        
+        # Group by RQRMNT_GROUP to understand prerequisite sets
+        for req_group, req_group_data in group.groupby("RQRMNT_GROUP"):
+            current_and_group = set()
+            current_connect_type = None
+
+            for _, row in req_group_data.iterrows():
+                requisite_type = str(row.get("REQUISITE_TYPE", "")).strip().upper()
+                rq_connect_type = str(row.get("RQ_CONNECT_TYPE", "")).strip().upper()
+                rqdet_crse = str(row.get("RQDET_CRSE", "")).strip()
+                descr254a = str(row.get("DESCR254A", "")).upper()
+                
+                # Check if this is a prerequisite row
+                is_prereq_row = (
+                    requisite_type == "PRE" or 
+                    "PREREQUISITE:" in descr254a or
+                    rqdet_crse and rqdet_crse != "NULL"
+                )
+                
+                if not is_prereq_row:
+                    continue
+                
+                # Extract prerequisite course
+                prereq_course = None
+                if rqdet_crse and rqdet_crse != "NULL":
+                    match = code_pat.search(rqdet_crse)
+                    if match:
+                        prereq_course = f"{match.group(1)} {match.group(2)}"
+                
+                # Also check DESCR254A for additional prerequisites
+                if not prereq_course and descr254a and "PREREQUISITE:" in descr254a:
+                    matches = code_pat.findall(descr254a)
+                    if matches:
+                        subject, code = matches[0]  # Take first match
+                        prereq_course = f"{subject} {code}"
+                
+                if prereq_course and prereq_course != target:
+                    # Handle AND/OR logic
+                    # This doesn't seem to be working correctly (MTH113 AND MTH113....)
+                    if rq_connect_type == "AND":
+                        current_and_group.add(prereq_course)
+                    elif rq_connect_type == "OR":
+                        # If we have an AND group, add it first (maybe this??)
+                        if current_and_group:
+                            prereq_groups[target].append(current_and_group.copy())
+                            current_and_group.clear()
+                        # Add the OR prerequisite as a single-item AND group
+                        prereq_groups[target].append({prereq_course})
+                    else:
+                        # Default to AND if no connect type specified
+                        current_and_group.add(prereq_course)
+            
+            # Add any remaining AND group
+            if current_and_group:
+                prereq_groups[target].append(current_and_group)
     
-    # Group by course (subject + course code) AND requirement group together
-    for (subject, crse_code, rqrmnt_group), group in registrar_df.groupby(["SUBJECT", "CRSE_CODE", "RQRMNT_GROUP"]):
-        target_course = make_course_id(subject, crse_code)
-        
-        # Filter to only prerequisite-related rows
-        prereq_rows = []
-        for _, row in group.iterrows():
-            requisite_type = str(row.get("REQUISITE_TYPE", "")).strip().upper()
-            rqdet_crse = str(row.get("RQDET_CRSE", "")).strip()
-            
-            # Check if this is a prerequisite row
-            is_prereq_row = (
-                requisite_type == "PRE" or 
-                (rqdet_crse and rqdet_crse not in ["NULL", "NONE", ""])
-            )
-            
-            if is_prereq_row:
-                prereq_rows.append(row)
-        
-        if not prereq_rows:
-            continue
-            
-        # Process the prerequisite rows in order
-        current_and_group = set()
-        all_groups = []
-        
-        for row in prereq_rows:
-            rq_connect_type = str(row.get("RQ_CONNECT_TYPE", "")).strip().upper()
-            rqdet_crse = str(row.get("RQDET_CRSE", "")).strip()
-            
-            # Extract prerequisite course
-            prereq_course = None
-            if rqdet_crse and rqdet_crse not in ["NULL", "NONE", ""]:
-                match = code_pat.search(rqdet_crse)
-                if match:
-                    prereq_course = f"{match.group(1)} {match.group(2)}"
-            
-            if prereq_course and prereq_course != target_course:
-                if rq_connect_type == "OR":
-                    # Save current AND group if it exists
-                    if current_and_group:
-                        all_groups.append(current_and_group.copy())
-                        current_and_group.clear()
-                    # Add OR course as a single-item group
-                    all_groups.append({prereq_course})
-                    
-                elif rq_connect_type == "AND":
-                    # Add to current AND group
-                    current_and_group.add(prereq_course)
-                    
-                else:
-                    # No connect type specified - assume AND
-                    current_and_group.add(prereq_course)
-        
-        # Don't forget the last AND group
-        if current_and_group:
-            all_groups.append(current_and_group)
-        
-        # Add to our results
-        if all_groups:
-            # Remove duplicates
-            unique_groups = []
-            seen = set()
-            for group in all_groups:
-                group_key = tuple(sorted(group))
-                if group_key not in seen:
-                    unique_groups.append(group)
-                    seen.add(group_key)
-            
-            prereq_groups[target_course] = unique_groups
-            print(f"Debug: {target_course} -> {unique_groups}")
-    
-    print(f"Debug: Found prerequisites for {len(prereq_groups)} courses")
     return prereq_groups
 
 def format_prerequisites(prereq_groups: dict[str, list[set[str]]], course_id: str) -> str:
