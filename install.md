@@ -79,6 +79,11 @@ python clean_data.py \
   --out curriculum_table.csv
 
 ```
+If you are running in Windows Powershell and the above command doesn't seem to work, try the following command with all in one line:
+```python
+python clean_data.py --registrar Fake_registrar.csv --majors Fake_majors.csv --out curriculum_table.csv
+
+```
 
 Expected Output
 
@@ -128,6 +133,11 @@ for f in files:
 PY
 ```
 
+Or on Windows Powershell, try running:
+```python
+python -c "import os; files=['Fake_registrar.csv','Fake_majors.csv']; [print(f'{f} exists:',os.path.exists(f)) or (os.path.exists(f) and print('  size (bytes):',os.path.getsize(f))) for f in files]"
+```
+
 **Pass:** both files report `exists: True` and non‑zero size.
 
 ---
@@ -162,6 +172,12 @@ if os.path.exists(p):
     for row in rows:
         print(row)
 PY
+```
+Or on Windows Powershell, try running:
+```python
+python -c "import os,csv,itertools;p='curriculum_table.csv';print(p,'exists:',os.path.exists(p)); \
+>> import sys; \
+>> ( (print(p,'size (bytes):',os.path.getsize(p)), [print(r) for r in itertools.islice(csv.reader(open(p,newline='',encoding='utf-8',errors='replace')),10)]) if os.path.exists(p) else None)"
 ```
 
 **Pass:** `curriculum_table.csv` exists, size > 0, and the preview prints rows.
