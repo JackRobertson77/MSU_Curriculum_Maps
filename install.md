@@ -23,18 +23,7 @@ Visit https://git-scm.com/downloads
 Find the correct version for your operating system, and click download.  
 Install Git with default settings.
 
-
-## 3. Install Necessary Packages
-The libraries we used for this project include:  
-NetworkX  
-Pandas  
-Open a command line terminal and run the following commands:  
-```bash
-pip install pandas  
-pip install networkx
-```
-
-## 4. Clone the Repository
+## 3. Clone the Repository
 
 
 In your command line terminal, run the following command:
@@ -42,7 +31,7 @@ In your command line terminal, run the following command:
 git clone https://github.com/JackRobertson77/MSU_Curriculum_Maps.git
 cd MSU_Curriculum_Maps
 ```
-## 5. Create Virtual Environment
+## 4. Create Virtual Environment
 Open a command line terminal, and run the following command:  
 ```bash
 python3 -m venv venv
@@ -59,6 +48,16 @@ Next, activate the virtual environment.
       source venv/bin/activate
       ```
 For either OS, you will know the Virtual Environment is active when you see (venv) in your terminal prompt. 
+
+## 5. Install Necessary Packages
+The libraries we used for this project include:  
+NetworkX  
+Pandas  
+Open a command line terminal and run the following commands:  
+```bash
+pip install pandas  
+pip install networkx
+```
 
 ## 6. Add Example Data
 
