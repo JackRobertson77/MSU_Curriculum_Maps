@@ -1,29 +1,6 @@
 # Installation & Setup
 
-
-
-## 1. Install Python
-
-
-Visit https://www.python.org/downloads/  
-The website will recognize your operating system automatically.  
-Click the link to "get the standalone installer for Python 3.x.x"  
-Once downloaded,  
- - If you're on a windows machine:  
-    - Run installer executable file.  
-    - Check the box that says "Add Python3.x to PATH"  
-    - Click "Install Now"  
- - If you're on a Mac Machine:  
-    - Open the .pkg file and follow the prompts.  
-
-
-
-## 2. Install Git
-Visit https://git-scm.com/downloads  
-Find the correct version for your operating system, and click download.  
-Install Git with default settings.
-
-## 3. Clone the Repository
+## 1. Clone the Repository
 
 
 In your command line terminal, run the following command:
@@ -31,7 +8,7 @@ In your command line terminal, run the following command:
 git clone https://github.com/JackRobertson77/MSU_Curriculum_Maps.git
 cd MSU_Curriculum_Maps
 ```
-## 4. Create Virtual Environment
+## 2. Create Virtual Environment
 Open a command line terminal, and run the following command:  
 ```bash
 python3 -m venv venv
@@ -49,7 +26,7 @@ Next, activate the virtual environment.
       ```
 For either OS, you will know the Virtual Environment is active when you see (venv) in your terminal prompt. 
 
-## 5. Install Necessary Packages
+## 3. Install Necessary Packages
 The libraries we used for this project include:  
 NetworkX  
 Pandas  
@@ -59,9 +36,9 @@ pip install pandas
 pip install networkx
 ```
 
-## 6. Add Example Data
+## 4. Add Example Data
 
-Place the example data files in the project root (same folder as clean_data.py):
+Verify that the example data files are in the project root (same folder as clean_data.py):
 
 Fake_registrar.csv
 
@@ -69,7 +46,7 @@ Fake_majors.csv
 
 These are synthetic test datasets that match the expected column structure of the real files.
 
-## 7. Run the Example
+## 5. Run the Example
    
 ```python
 python clean_data.py \
@@ -102,6 +79,8 @@ project-root/
 └── README.md
 ```
 
+## 6. Test current graph demo
+In the project root, there should be a file named Graph.ipynb. Open the file in your preferred IDE and run through the directions in the notebook to create a graph.
 
 
 # Testing the Installations
