@@ -3,6 +3,10 @@
 *Jack Robertson, Lauryn Crandall, Livia Perelli, James Restaneo*
 
 ---
+## Install Instructions
+Go to install.md for intructions on how to run and install the program.
+
+---
 
 ## Project Overview  
 This project develops a robust and reusable system for **parsing, cleaning, and visualizing course dependency data** at Michigan State University. The work focuses on transforming messy course prerequisite/co-requisite data into a **directed graph**, enabling analysis of curriculum structure and student pathways.  

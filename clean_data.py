@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import os
 import argparse
 import re
@@ -91,101 +92,96 @@ def extract_major_curriculum_structure(majors_df: pd.DataFrame) -> pd.DataFrame:
     return curriculum_structure
 
 def extract_prereq_groups(registrar_df: pd.DataFrame) -> dict[str, list[set[str]]]:
-    """Builds prerequisite relationships from registrar data, preserving AND/OR logic.
-    This is the core logic parser for prerequisites.
-    The registrar file lists rules like “CSE 232 AND CSE 260” or “MTH 103 OR MTH 116”.
-    This function:
-
-    Groups data by course and requirement group.
-
-    Detects “PRE” or “PREREQUISITE” rows.
-
-    Extracts all course IDs that are required.
-
-    Keeps them grouped in sets: each set is an AND group, and multiple sets mean OR options."""
-    
+    """Build prerequisite relationships preserving AND/OR logic, with robust normalization and dedup."""
+    from collections import defaultdict
     prereq_groups = defaultdict(list)
-    code_pat = re.compile(r"\b([A-Z]{2,4})\s*(\d{2,4}[A-Z]?)\b")
-    
-    # Group by course and requirement group to understand the logic
-    for course_id, group in registrar_df.groupby(["SUBJECT", "CRSE_CODE"]):
-        target = make_course_id(course_id[0], course_id[1])
-        
-        # Group by RQRMNT_GROUP to understand prerequisite sets
-        for req_group, req_group_data in group.groupby("RQRMNT_GROUP"):
-            current_and_group = set()
-            current_connect_type = None
 
-            for _, row in req_group_data.iterrows():
-                requisite_type = str(row.get("REQUISITE_TYPE", "")).strip().upper()
+    # Match like "CSE 331", "MTH 103B"
+    code_pat = re.compile(r"\b([A-Z]{2,4})\s*(\d{2,4}[A-Z]?)\b")
+
+    # Helper to normalize course tokens consistently
+    def norm_course(token: str) -> str:
+        token = str(token).strip()
+        token = re.sub(r"\s+", " ", token)
+        token = token.upper()
+        return token
+
+    # Iterate by target course
+    for (subj, code), group in registrar_df.groupby(["SUBJECT", "CRSE_CODE"]):
+        code_clean = re.sub(r"\.0$", "", str(code)).strip()
+        target = norm_course(f"{subj} {code_clean}")
+        groups_out = []
+
+        # Iterate each requirement group id to respect internal logic
+        for _, req_group_data in group.groupby("RQRMNT_GROUP"):
+            current_and = set()
+
+            # Only prerequisite (PRE) and course list detail rows (CLST)
+            req_rows = req_group_data[
+                (req_group_data.get("REQUISITE_TYPE", "").astype(str).str.upper() == "PRE") &
+                (req_group_data.get("RQ_LINE_DET_TYPE", "").astype(str).str.upper() == "CLST")
+            ]
+
+            for _, row in req_rows.iterrows():
                 rq_connect_type = str(row.get("RQ_CONNECT_TYPE", "")).strip().upper()
-                rqdet_crse = str(row.get("RQDET_CRSE", "")).strip()
-                descr254a = str(row.get("DESCR254A", "")).upper()
-                
-                # Check if this is a prerequisite row
-                is_prereq_row = (
-                    requisite_type == "PRE" or 
-                    "PREREQUISITE:" in descr254a or
-                    rqdet_crse and rqdet_crse != "NULL"
-                )
-                
-                if not is_prereq_row:
+                # Prefer structured fields; avoid DESCR254A which is narrative/repeated
+                text = str(row.get("CourseList", "") or row.get("RQDET_CRSE", "") or "")
+                m = code_pat.search(text)
+                if not m:
                     continue
-                
-                # Extract prerequisite course
-                prereq_course = None
-                if rqdet_crse and rqdet_crse != "NULL":
-                    match = code_pat.search(rqdet_crse)
-                    if match:
-                        prereq_course = f"{match.group(1)} {match.group(2)}"
-                
-                # Also check DESCR254A for additional prerequisites
-                if not prereq_course and descr254a and "PREREQUISITE:" in descr254a:
-                    matches = code_pat.findall(descr254a)
-                    if matches:
-                        subject, code = matches[0]  # Take first match
-                        prereq_course = f"{subject} {code}"
-                
-                if prereq_course and prereq_course != target:
-                    # Handle AND/OR logic
-                    # This doesn't seem to be working correctly (MTH113 AND MTH113....)
-                    if rq_connect_type == "AND":
-                        current_and_group.add(prereq_course)
-                    elif rq_connect_type == "OR":
-                        # If we have an AND group, add it first (maybe this??)
-                        if current_and_group:
-                            prereq_groups[target].append(current_and_group.copy())
-                            current_and_group.clear()
-                        # Add the OR prerequisite as a single-item AND group
-                        prereq_groups[target].append({prereq_course})
-                    else:
-                        # Default to AND if no connect type specified
-                        current_and_group.add(prereq_course)
-            
-            # Add any remaining AND group
-            if current_and_group:
-                prereq_groups[target].append(current_and_group)
-    
+                prereq_course = norm_course(f"{m.group(1)} {m.group(2)}")
+                if prereq_course == target:
+                    continue  # skip self-reference
+
+                if rq_connect_type == "AND":
+                    current_and.add(prereq_course)
+                else:
+                    # default/blank or OR = treat as OR separator
+                    if current_and:
+                        groups_out.append(frozenset(current_and))
+                        current_and.clear()
+                    groups_out.append(frozenset([prereq_course]))
+
+            if current_and:
+                groups_out.append(frozenset(current_and))
+
+        # Global dedup across all groups for this target
+        unique = []
+        seen = set()
+        for g in groups_out:
+            key = frozenset(norm_course(x) for x in g)
+            if key not in seen:
+                seen.add(key)
+                unique.append(set(key))
+
+        if unique:
+            prereq_groups[target] = unique
+
     return prereq_groups
 
 def format_prerequisites(prereq_groups: dict[str, list[set[str]]], course_id: str) -> str:
-    """Format prerequisites with AND/OR logic."""
+    """Format prerequisites with AND/OR logic, with defensive dedup."""
     if course_id not in prereq_groups or not prereq_groups[course_id]:
         return ""
-    
-    groups = prereq_groups[course_id]
-    formatted_groups = []
-    
-    for group in groups:
-        if len(group) == 1:
-            formatted_groups.append(next(iter(group)))  # Single course
+
+    # Dedup identical groups robustly (normalize case/whitespace)
+    seen = set()
+    groups = []
+    for g in prereq_groups[course_id]:
+        key = frozenset({str(s).strip().upper().replace("  ", " ") for s in g})
+        if key not in seen:
+            seen.add(key)
+            groups.append(key)
+
+    # Build string: AND inside groups, OR across groups
+    parts = []
+    for key in groups:
+        items = sorted(key)
+        if len(items) == 1:
+            parts.append(items[0])
         else:
-            formatted_groups.append("(" + " AND ".join(sorted(group)) + ")")
-    
-    if len(formatted_groups) == 1:
-        return formatted_groups[0]
-    else:
-        return " OR ".join(formatted_groups)
+            parts.append("(" + " AND ".join(items) + ")")
+    return " OR ".join(parts)
 
 def compute_term_layers(prereq_groups: dict[str, list[set[str]]], course_ids: set[str]) -> dict[str, int]:
     """Compute topological ordering for courses with proper error handling."""
