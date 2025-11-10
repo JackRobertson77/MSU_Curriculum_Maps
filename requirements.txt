@@ -1,6 +1,7 @@
 pandas
 matplotlib
 networkx
+pyvis
 openpyxl
 argparse
 jupyter
