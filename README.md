@@ -68,6 +68,12 @@ This project develops a robust and reusable system for **parsing, cleaning, and 
 Here is the link to our project plan video: https://mediaspace.msu.edu/media/MSU_Curriculum-CMSE495_Plan_Presentation_Video/1_ugrk2r6p
 
 ---
+## Figure Reproducibility
+To reproduce the figures used in this project, open and run:
+- [`reproducibility.ipynb`](./reproducibility.ipynb)
+
+This notebook provides complete step-by-step instructions for generating the curriculum/prerequisite graph figure.
+---
 
 ## License  
 This project is licensed under the [MIT License](LICENSE.txt).  
