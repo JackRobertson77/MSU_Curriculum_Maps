@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MSU Curriculum Roadmap</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/vis-network.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #18453B 0%, #2D5F4F 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+
+        .controls {
+            padding: 25px 30px;
+            background: #f8f9fa;
+            border-bottom: 2px solid #e9ecef;
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .controls-left {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            align-items: center;
+            flex: 1;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .control-group label {
+            font-weight: 600;
+            color: #495057;
+            font-size: 0.9em;
+        }
+
+        select, button {
+            padding: 10px 15px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: all 0.3s;
+        }
+
+        select {
+            min-width: 350px;
+            cursor: pointer;
+            background: white;
+        }
+
+        button {
+            background: linear-gradient(135deg, #18453B 0%, #2D5F4F 100%);
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            padding: 10px 30px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(24, 69, 59, 0.3);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .graph-container {
+            position: relative;
+            height: 750px;
+        }
+
+        #network {
+            width: 100%;
+            height: 100%;
+        }
+
+        .legend {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+            z-index: 1000;
+            max-width: 200px;
+        }
+
+        .legend-title {
+            font-weight: 700;
+            margin-bottom: 10px;
+            color: #18453B;
+            font-size: 1.1em;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 8px 0;
+            font-size: 0.85em;
+        }
+
+        .legend-color {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            border: 2px solid #333;
+            flex-shrink: 0;
+        }
+
+        .info-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+            z-index: 1000;
+            max-width: 450px;
+            display: none;
+        }
+
+        .info-panel.active {
+            display: block;
+        }
+
+        .info-title {
+            font-weight: 700;
+            color: #18453B;
+            margin-bottom: 10px;
+            font-size: 1.2em;
+        }
+
+        .info-content {
+            font-size: 0.95em;
+            color: #495057;
+            line-height: 1.8;
+        }
+
+        .info-prereqs {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            font-size: 0.9em;
+        }
+
+        .close-info {
+            float: right;
+            cursor: pointer;
+            font-size: 1.5em;
+            color: #6c757d;
+            line-height: 1;
+        }
+
+        .close-info:hover {
+            color: #18453B;
+        }
+
+        .stats {
+            padding: 20px 30px;
+            background: #f8f9fa;
+            border-top: 2px solid #e9ecef;
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 15px 25px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            min-width: 150px;
+        }
+
+        .stat-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #18453B;
+        }
+
+        .stat-label {
+            color: #6c757d;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            font-size: 1.2em;
+            color: #6c757d;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 30px;
+        }
+
+        .view-toggle {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .view-toggle label {
+            font-weight: 600;
+            color: #495057;
+            font-size: 0.9em;
+        }
+
+        .toggle-btn {
+            padding: 8px 20px;
+            background: white;
+            border: 2px solid #18453B;
+            color: #18453B;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .toggle-btn.active {
+            background: #18453B;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎓 MSU Curriculum Roadmap</h1>
+            <p>Interactive 4-Year Plan with Prerequisite Flow</p>
+        </div>
+
+        <div class="controls">
+            <div class="controls-left">
+                <div class="control-group">
+                    <label for="majorSelect">Select Your Major:</label>
+                    <select id="majorSelect">
+                        <option value="">Loading majors...</option>
+                    </select>
+                </div>
+                
+                <div class="view-toggle">
+                    <label>View:</label>
+                    <button class="toggle-btn active" data-view="timeline">Timeline</button>
+                    <button class="toggle-btn" data-view="network">Network</button>
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 10px;">
+                <button id="loadGraphBtn" disabled>Load Roadmap</button>
+                <button id="resetViewBtn">Reset View</button>
+                <button id="zoomInBtn">Zoom In</button>
+                <button id="zoomOutBtn">Zoom Out</button>
+            </div>
+        </div>
+
+        <div id="errorContainer"></div>
+        <div id="loadingContainer" class="loading" style="display: none;">
+            Loading your curriculum roadmap...
+        </div>
+
+        <div class="graph-container">
+            <div id="network"></div>
+            
+            <div class="legend">
+                <div class="legend-title">Year Level</div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #4CAF50;"></div>
+                    <span>Freshman</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #2196F3;"></div>
+                    <span>Sophomore</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #FF9800;"></div>
+                    <span>Junior</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #F44336;"></div>
+                    <span>Senior</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #9E9E9E;"></div>
+                    <span>Elective/Other</span>
+                </div>
+            </div>
+
+            <div class="info-panel" id="infoPanel">
+                <span class="close-info" id="closeInfo">&times;</span>
+                <div class="info-title" id="infoTitle">Course Info</div>
+                <div class="info-content" id="infoContent"></div>
+                <div class="info-prereqs" id="infoPrereqs" style="display: none;"></div>
+            </div>
+        </div>
+
+        <div class="stats" id="stats">
+            <div class="stat-item">
+                <div class="stat-value" id="courseCount">0</div>
+                <div class="stat-label">Courses</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="prereqCount">0</div>
+                <div class="stat-label">Prerequisites</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="totalCredits">0</div>
+                <div class="stat-label">Total Credits</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        let network = null;
+        let allNodes = [];
+        let allEdges = [];
+        let currentView = 'timeline';
+        let majorPlanData = null;
+        let selectedNodeId = null;  // Track selected node
+
+        const yearColors = {
+            'Freshman': '#4CAF50',
+            'Sophomore': '#2196F3',
+            'Junior': '#FF9800',
+            'Senior': '#F44336',
+            'Unknown': '#9E9E9E'
+        };
+
+        const termOrder = { 'Fall': 0, 'Spring': 1, 'Summer': 2, 'Winter': 3, 'Unknown': 4 };
+        const yearLevels = { 'Freshman': 0, 'Sophomore': 1, 'Junior': 2, 'Senior': 3, 'Unknown': 4 };
+
+        async function init() {
+            await loadMajors();
+            initNetwork();
+            setupEventListeners();
+        }
+
+        async function loadMajors() {
+            try {
+                const response = await fetch(`${API_BASE}/majors`);
+                const majors = await response.json();
+                
+                const select = document.getElementById('majorSelect');
+                select.innerHTML = '<option value="">-- Select a Major --</option>';
+                
+                const uniqueMajors = {};
+                majors.forEach(major => {
+                    const key = `${major.Major}`;
+                    if (!uniqueMajors[key]) {
+                        uniqueMajors[key] = major;
+                    }
+                });
+
+                Object.values(uniqueMajors).forEach(major => {
+                    const option = document.createElement('option');
+                    option.value = major.Major;
+                    option.textContent = `${major['Major Title']} (${major['Plan Title'] || 'Standard Plan'})`;
+                    select.appendChild(option);
+                });
+
+                document.getElementById('loadGraphBtn').disabled = false;
+            } catch (error) {
+                showError('Failed to load majors. Make sure the API is running.');
+                console.error(error);
+            }
+        }
+
+        function initNetwork() {
+            const container = document.getElementById('network');
+            const data = { nodes: [], edges: [] };
+            const options = getNetworkOptions();
+            network = new vis.Network(container, data, options);
+            
+            // Event handlers
+            network.on('hoverNode', handleHoverNode);
+            network.on('blurNode', handleBlurNode);
+            network.on('click', handleClick);
+        }
+
+        function getNetworkOptions() {
+            return {
+                nodes: {
+                    shape: 'box',
+                    margin: { top: 8, right: 10, bottom: 8, left: 10 },
+                    font: { size: 13, face: 'Arial', color: '#333' },
+                    borderWidth: 2,
+                    shadow: { enabled: true, size: 5 },
+                    widthConstraint: { minimum: 80, maximum: 150 }
+                },
+                edges: {
+                    arrows: { to: { enabled: true, scaleFactor: 0.6 } },
+                    smooth: { type: 'cubicBezier', roundness: 0.4 },
+                    color: { color: '#848484', highlight: '#18453B', hover: '#18453B' },
+                    width: 2
+                },
+                layout: currentView === 'timeline' ? {
+                    hierarchical: {
+                        enabled: true,
+                        direction: 'DU',
+                        sortMethod: 'directed',
+                        nodeSpacing: 180,
+                        levelSeparation: 150,
+                        treeSpacing: 200
+                    }
+                } : {
+                    hierarchical: {
+                        enabled: true,
+                        direction: 'LR',
+                        sortMethod: 'directed',
+                        nodeSpacing: 150,
+                        levelSeparation: 200
+                    }
+                },
+                physics: { enabled: false },
+                interaction: {
+                    hover: true,
+                    tooltipDelay: 150,
+                    navigationButtons: true,
+                    keyboard: true,
+                    zoomView: true,
+                    dragView: true,
+                    zoomSpeed: 0.5
+                }
+            };
+        }
+
+        async function loadGraph() {
+            const majorCode = document.getElementById('majorSelect').value;
+            if (!majorCode) {
+                alert('Please select a major first');
+                return;
+            }
+
+            document.getElementById('loadingContainer').style.display = 'block';
+            document.getElementById('errorContainer').innerHTML = '';
+            selectedNodeId = null;
+
+            try {
+                const planResponse = await fetch(`${API_BASE}/majors/${majorCode}`);
+                majorPlanData = await planResponse.json();
+
+                const graphResponse = await fetch(`${API_BASE}/graph?major=${majorCode}`);
+                const graphData = await graphResponse.json();
+
+                buildRoadmap(majorPlanData, graphData);
+                document.getElementById('loadingContainer').style.display = 'none';
+            } catch (error) {
+                document.getElementById('loadingContainer').style.display = 'none';
+                showError('Failed to load roadmap: ' + error.message);
+                console.error(error);
+            }
+        }
+
+        function buildRoadmap(planData, graphData) {
+            const realCourses = planData.courses.filter(c => 
+                !c.course_id.includes('Elective') &&
+                !c.course_id.includes('Requirement') &&
+                !c.course_id.includes('Level') &&
+                !c.course_id.includes('Higher') &&
+                c.course_id.match(/^[A-Z]{2,4}\s+\d{2,4}/)
+            );
+
+            const seenCourses = new Set();
+            const uniqueCourses = realCourses.filter(course => {
+                if (seenCourses.has(course.course_id)) {
+                    return false;
+                }
+                seenCourses.add(course.course_id);
+                return true;
+            });
+
+            allNodes = uniqueCourses.map((course, idx) => {
+                const yearNum = yearLevels[course.year_level] || 4;
+                const termNum = termOrder[course.term_season] || 0;
+                const level = yearNum * 4 + termNum;
+
+                return {
+                    id: course.course_id,
+                    label: course.course_id,
+                    title: `<b>${course.course_id}</b><br/>${course.course_name}<br/>Year: ${course.year_level}<br/>Term: ${course.term_season}<br/>Credits: ${course.credits}`,
+                    color: yearColors[course.year_level] || yearColors['Unknown'],
+                    year: course.year_level,
+                    term: course.term_season,
+                    courseName: course.course_name,
+                    credits: course.credits,
+                    prerequisites: course.prerequisites,
+                    level: level,
+                    depth: course.prerequisite_depth
+                };
+            });
+
+            const courseIds = new Set(allNodes.map(n => n.id.toUpperCase()));
+            const edgeSet = new Set();
+            
+            allEdges = graphData.edges
+                .filter(edge => 
+                    courseIds.has(edge.source.toUpperCase()) && 
+                    courseIds.has(edge.target.toUpperCase())
+                )
+                .filter(edge => {
+                    const edgeId = `${edge.source}-${edge.target}`;
+                    if (edgeSet.has(edgeId)) return false;
+                    edgeSet.add(edgeId);
+                    return true;
+                })
+                .map(edge => ({
+                    from: edge.source,
+                    to: edge.target,
+                    id: `${edge.source}-${edge.target}`
+                }));
+
+            updateNetwork();
+            updateStats(allNodes, allEdges, planData.total_credits);
+        }
+
+        function updateNetwork() {
+            network.setOptions(getNetworkOptions());
+            network.setData({
+                nodes: new vis.DataSet(allNodes),
+                edges: new vis.DataSet(allEdges)
+            });
+            setTimeout(() => network.fit({ animation: true }), 100);
+        }
+
+        function handleHoverNode(params) {
+            // Don't override selected node styling on hover
+            if (selectedNodeId && selectedNodeId !== params.node) {
+                return;
+            }
+
+            const nodeId = params.node;
+            highlightNode(nodeId, false);
+        }
+
+        function handleBlurNode() {
+            // If a node is selected, keep it highlighted
+            if (selectedNodeId) {
+                highlightNode(selectedNodeId, true);
+            } else {
+                clearHighlight();
+            }
+        }
+
+        function handleClick(params) {
+            if (params.nodes.length > 0) {
+                const nodeId = params.nodes[0];
+                
+                // Toggle selection
+                if (selectedNodeId === nodeId) {
+                    selectedNodeId = null;
+                    clearHighlight();
+                    hideInfoPanel();
+                } else {
+                    selectedNodeId = nodeId;
+                    highlightNode(nodeId, true);
+                }
+            } else {
+                // Clicked on empty space
+                selectedNodeId = null;
+                clearHighlight();
+                hideInfoPanel();
+            }
+        }
+
+        function highlightNode(nodeId, selected) {
+            const node = allNodes.find(n => n.id === nodeId);
+            if (!node) return;
+
+            const connectedNodes = network.getConnectedNodes(nodeId);
+            const updatedNodes = allNodes.map(n => {
+                if (n.id === nodeId || connectedNodes.includes(n.id)) {
+                    return { 
+                        id: n.id, 
+                        borderWidth: selected ? 5 : 4, 
+                        color: { border: '#18453B' } 
+                    };
+                } else {
+                    return { id: n.id, opacity: 0.25 };
+                }
+            });
+            network.body.data.nodes.update(updatedNodes);
+
+            showInfoPanel(node);
+        }
+
+        function clearHighlight() {
+            const updatedNodes = allNodes.map(n => ({
+                id: n.id,
+                opacity: 1,
+                borderWidth: 2,
+                color: { border: null }
+            }));
+            network.body.data.nodes.update(updatedNodes);
+        }
+
+        function showInfoPanel(node) {
+            document.getElementById('infoTitle').textContent = node.label;
+            document.getElementById('infoContent').innerHTML = `
+                <strong>Course:</strong> ${node.courseName}<br/>
+                <strong>Year:</strong> ${node.year}<br/>
+                <strong>Term:</strong> ${node.term}<br/>
+                <strong>Credits:</strong> ${node.credits || 'N/A'}
+            `;
+            
+            if (node.prerequisites) {
+                document.getElementById('infoPrereqs').style.display = 'block';
+                document.getElementById('infoPrereqs').innerHTML = `
+                    <strong>Prerequisites:</strong><br/>${node.prerequisites}
+                `;
+            } else {
+                document.getElementById('infoPrereqs').style.display = 'none';
+            }
+            
+            document.getElementById('infoPanel').classList.add('active');
+        }
+
+        function hideInfoPanel() {
+            document.getElementById('infoPanel').classList.remove('active');
+        }
+
+        function updateStats(nodes, edges, totalCredits) {
+            document.getElementById('courseCount').textContent = nodes.length;
+            document.getElementById('prereqCount').textContent = edges.length;
+            document.getElementById('totalCredits').textContent = Math.round(totalCredits || 0);
+        }
+
+        function resetView() {
+            if (network) {
+                selectedNodeId = null;
+                network.fit({ animation: true });
+                clearHighlight();
+                hideInfoPanel();
+            }
+        }
+
+        function showError(message) {
+            document.getElementById('errorContainer').innerHTML = `<div class="error">${message}</div>`;
+        }
+
+        function setupEventListeners() {
+            document.getElementById('loadGraphBtn').addEventListener('click', loadGraph);
+            document.getElementById('resetViewBtn').addEventListener('click', resetView);
+            document.getElementById('closeInfo').addEventListener('click', () => {
+                selectedNodeId = null;
+                hideInfoPanel();
+                clearHighlight();
+            });
+            
+            document.getElementById('zoomInBtn').addEventListener('click', () => {
+                if (network) network.moveTo({ scale: network.getScale() * 1.2 });
+            });
+            document.getElementById('zoomOutBtn').addEventListener('click', () => {
+                if (network) network.moveTo({ scale: network.getScale() * 0.8 });
+            });
+            document.getElementById('majorSelect').addEventListener('change', function() {
+                document.getElementById('loadGraphBtn').disabled = !this.value;
+            });
+
+            document.querySelectorAll('.toggle-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    currentView = this.dataset.view;
+                    if (allNodes.length > 0) {
+                        updateNetwork();
+                    }
+                });
+            });
+        }
+
+        init();
+    </script>
+</body>
+</html>
