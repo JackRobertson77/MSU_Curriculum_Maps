@@ -1,5 +1,9 @@
 # Installation & Setup
 
+## 0. Download Anaconda/Miniconda If Not Already Installed
+
+Download from [anaconda.com](https://www.anaconda.com/download) if needed.
+
 ## 1. Clone the Repository
 
 
@@ -35,7 +39,7 @@ In the terminal, run the command: jupyter lab
 ```bash
 jupyter lab
 ```
-This should open up jupyter lab in your browser. From there, go into the file Graph.ipynb and follow the steps inside to complete the tutorial.
+This should open up jupyter lab in your browser. From there, go to INSTALL_AND_TEST.ipynb to make sure that all install steps went as planned. Once all tests pass, you will be directed to run through the tutorial in Graph.ipynb. 
 
 
 ## 5 Quick troubleshooting (minimal)
