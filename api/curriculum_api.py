@@ -82,6 +82,7 @@ def make_course_id(subj: str, code: str) -> str:
     num = re.sub(r"\.0$", "", num)
     return f"{subj} {num}".strip()
 
+
 def extract_prereq_groups(registrar_df: pd.DataFrame) -> dict[str, list[set[str]]]:
     """Build prerequisite relationships preserving AND/OR logic"""
     prereq_groups = defaultdict(list)
@@ -519,3 +520,39 @@ async def search_courses(
         })
     
     return {"query": query, "count": len(results), "results": results}
+
+@app.get("/courses/{course_id}/relations")
+async def get_course_relations(course_id: str):
+
+    if data_store.prereq_groups is None:
+        raise HTTPException(status_code=503, detail="Data not loaded")
+
+    cid = course_id.upper().replace("-", " ")
+
+    if data_store.courses_df is not None:
+        normalized_ids = {
+            f"{row['SUBJECT']} {str(row['CRSE_CODE']).replace('.0','')}".upper()
+            for _, row in data_store.courses_df.iterrows()
+        }
+        if cid not in normalized_ids:
+            raise HTTPException(status_code=404, detail=f"Course {cid} does not exist in dataset")
+
+    raw_groups = data_store.prereq_groups.get(cid, [])
+    prereqs_raw = [sorted(list(group)) for group in raw_groups]
+    prereqs_formatted = format_prerequisites(data_store.prereq_groups, cid) or "None"
+
+    dependents = []
+    for target, groups in data_store.prereq_groups.items():
+        for group in groups:
+            if cid in group:
+                dependents.append(target)
+
+    depth = data_store.prereq_depth.get(cid, 0)
+
+    return {
+        "course": cid,
+        "prerequisites_raw": prereqs_raw,     
+        "prerequisites_formatted": prereqs_formatted,
+        "is_prereq_for": sorted(set(dependents)),
+        "depth": depth
+    }
