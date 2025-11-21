@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
 MSU Curriculum Map API - FIXED VERSION
-Fixes: 1) Duplicate credit counting, 2) Better course deduplication
 """
 
 from fastapi import FastAPI, HTTPException, Query
