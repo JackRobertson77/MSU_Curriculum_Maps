@@ -148,10 +148,6 @@
                     <div class="stat-value" id="prereqCount">0</div>
                     <div class="stat-label">Prerequisites</div>
                 </div>
-                <div class="stat-item">
-                    <div class="stat-value" id="totalCredits">0</div>
-                    <div class="stat-label">Credits</div>
-                </div>
                 <button id="resetViewBtn">Reset View</button>
                 <button id="zoomInBtn">+</button>
                 <button id="zoomOutBtn">-</button>
@@ -254,15 +250,21 @@
                 },
                 layout: {
                     hierarchical: {
-                        enabled: true,
-                        direction: 'LR',  // Changed from 'DU' to 'LR' for horizontal layout
-                        sortMethod: 'directed',
-                        nodeSpacing: 100,
-                        levelSeparation: 200,
-                        treeSpacing: 150
+                        enabled: false
                     }
                 },
-                physics: { enabled: false },
+                physics: { 
+                    enabled: true,
+                    stabilization: {
+                        enabled: true,
+                        iterations: 300
+                    },
+                    barnesHut: {
+                        gravitationalConstant: -3000,
+                        springConstant: 0.002,
+                        springLength: 250
+                    }
+                },
                 interaction: {
                     hover: true,
                     tooltipDelay: 150,
@@ -313,18 +315,25 @@
                 const yearNum = yearLevels[course.year_level] || 4;
                 const termNum = termOrder[course.term_season] || 0;
                 const level = yearNum * 4 + termNum;
+                
+                // Custom positioning: X by year (left to right), Y by term
+                const x = yearNum * 400;
+                const y = termNum * 150 + (Math.random() * 50 - 25);
+                
                 return {
                     id: course.course_id,
                     label: course.course_id,
-                    title: `<b>${course.course_id}</b><br/>${course.course_name}<br/>Year: ${course.year_level}<br/>Term: ${course.term_season}<br/>Credits: ${course.credits}`,
+                    title: `<b>${course.course_id}</b><br/>${course.course_name}<br/>Year: ${course.year_level}<br/>Term: ${course.term_season}`,
                     color: yearColors[course.year_level] || yearColors['Unknown'],
                     year: course.year_level,
                     term: course.term_season,
                     courseName: course.course_name,
-                    credits: course.credits,
                     prerequisites: course.prerequisites,
                     level: level,
-                    depth: course.prerequisite_depth
+                    depth: course.prerequisite_depth,
+                    x: x,
+                    y: y,
+                    fixed: { x: true, y: false }
                 };
             });
             const courseIds = new Set(allNodes.map(n => n.id.toUpperCase()));
@@ -339,7 +348,7 @@
                 })
                 .map(edge => ({ from: edge.source, to: edge.target, id: `${edge.source}-${edge.target}` }));
             updateNetwork();
-            updateStats(allNodes, allEdges, planData.total_credits);
+            updateStats(allNodes, allEdges);
         }
 
         function updateNetwork() {
@@ -386,7 +395,7 @@
 
         function showInfoPanel(node) {
             document.getElementById('infoTitle').textContent = node.label;
-            document.getElementById('infoContent').innerHTML = `<strong>Course:</strong> ${node.courseName}<br/><strong>Year:</strong> ${node.year}<br/><strong>Term:</strong> ${node.term}<br/><strong>Credits:</strong> ${node.credits || 'N/A'}`;
+            document.getElementById('infoContent').innerHTML = `<strong>Course:</strong> ${node.courseName}<br/><strong>Year:</strong> ${node.year}<br/><strong>Term:</strong> ${node.term}`;
             if (node.prerequisites) {
                 document.getElementById('infoPrereqs').style.display = 'block';
                 document.getElementById('infoPrereqs').innerHTML = `<strong>Prerequisites:</strong><br/>${node.prerequisites}`;
@@ -396,10 +405,9 @@
 
         function hideInfoPanel() { document.getElementById('infoPanel').classList.remove('active'); }
 
-        function updateStats(nodes, edges, totalCredits) {
+        function updateStats(nodes, edges) {
             document.getElementById('courseCount').textContent = nodes.length;
             document.getElementById('prereqCount').textContent = edges.length;
-            document.getElementById('totalCredits').textContent = Math.round(totalCredits || 0);
         }
 
         function resetView() {
