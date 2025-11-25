@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-MSU Curriculum Map API - FIXED VERSION
+MSU Curriculum Map API
 """
 
 from fastapi import FastAPI, HTTPException, Query
@@ -21,7 +21,6 @@ class Course(BaseModel):
     course_name: str
     subject: str
     course_code: str
-    credits: Optional[str] = None
 
 class PrerequisiteGroup(BaseModel):
     courses: List[str]
@@ -38,18 +37,15 @@ class CurriculumCourse(BaseModel):
     course_name: str
     year_level: str
     term_season: str
-    credits: Optional[str]
     prerequisites: str
     prerequisite_depth: int
     has_prerequisites: bool
-    feasibility_warning: Optional[str]
 
 class MajorPlan(BaseModel):
     major_code: str
     major_title: str
     plan_title: str
     courses: List[CurriculumCourse]
-    total_credits: float
     
 class GraphNode(BaseModel):
     id: str
@@ -58,7 +54,6 @@ class GraphNode(BaseModel):
     major: Optional[str]
     year: Optional[str]
     term: Optional[str]
-    credits: Optional[str]
     depth: int
 
 class GraphEdge(BaseModel):
@@ -80,7 +75,6 @@ def make_course_id(subj: str, code: str) -> str:
     num = str(code).strip()
     num = re.sub(r"\.0$", "", num)
     return f"{subj} {num}".strip()
-
 
 def extract_prereq_groups(registrar_df: pd.DataFrame) -> dict[str, list[set[str]]]:
     """Build prerequisite relationships preserving AND/OR logic"""
@@ -104,7 +98,7 @@ def extract_prereq_groups(registrar_df: pd.DataFrame) -> dict[str, list[set[str]
         
         if prereq_rows.empty:
             continue
-        
+
         and_groups = []
         
         for _, row in prereq_rows.iterrows():
@@ -121,7 +115,14 @@ def extract_prereq_groups(registrar_df: pd.DataFrame) -> dict[str, list[set[str]
                 and_groups.append(or_group)
         
         if and_groups:
-            prereq_groups[target] = and_groups
+            unique_groups = []
+            seen = set()
+            for group in and_groups:
+                frozen = frozenset(group)
+                if frozen not in seen:
+                    seen.add(frozen)
+                    unique_groups.append(group)
+            prereq_groups[target] = unique_groups
 
     return prereq_groups
 
@@ -297,7 +298,7 @@ data_store = CurriculumDataStore()
 async def startup_event():
     """Load data on startup"""
     registrar_path = "20250919_Registrars_Data(in).csv"
-    majors_path = "CNS_Majors_Data.xlsx"  # Changed to CSV
+    majors_path = "CNS_Majors_Data.xlsx"
     
     try:
         data_store.load_data(registrar_path, majors_path)
@@ -336,37 +337,25 @@ async def get_major_plan(major_code: str):
     if major_data.empty:
         raise HTTPException(status_code=404, detail=f"Major {major_code} not found")
     
-    # FIX: Deduplicate courses before calculating credits
     seen_courses = {}
     courses = []
-    total_credits = 0.0
     
     for _, row in major_data.iterrows():
         course_id = row["Course ID"]
-        
-        # Skip duplicates - keep first occurrence
+ 
         if course_id in seen_courses:
             continue
         
         seen_courses[course_id] = True
-        
-        # Parse credits
-        try:
-            credits_val = float(row.get("Credits", 0) or 0)
-            total_credits += credits_val
-        except:
-            credits_val = 0.0
         
         courses.append(CurriculumCourse(
             course_id=course_id,
             course_name=row["Course Name"],
             year_level=row["Year Level"],
             term_season=row["Term Season"],
-            credits=str(row.get("Credits", "")),
             prerequisites=row["Prerequisites"],
             prerequisite_depth=int(row["Prerequisite Depth"]),
             has_prerequisites=bool(row["Has Prerequisites"]),
-            feasibility_warning=None
         ))
     
     return MajorPlan(
@@ -374,7 +363,6 @@ async def get_major_plan(major_code: str):
         major_title=major_data.iloc[0]["Major Title"],
         plan_title=major_data.iloc[0].get("Plan Title", ""),
         courses=courses,
-        total_credits=round(total_credits, 1)
     )
 
 @app.get("/courses/{course_id}", response_model=Course)
@@ -405,7 +393,6 @@ async def get_course(course_id: str):
         course_name=row["COURSE_TITLE_LONG"],
         subject=subject,
         course_code=code,
-        credits=None
     )
 
 @app.get("/courses/{course_id}/prerequisites", response_model=CoursePrerequisites)
@@ -472,7 +459,6 @@ async def get_graph_data(
             major=str(row.get("Major")) if pd.notna(row.get("Major")) else None,
             year=row.get("Year Level"),
             term=row.get("Term Season"),
-            credits=str(row.get("Credits", "")),
             depth=depth
         ))
     
