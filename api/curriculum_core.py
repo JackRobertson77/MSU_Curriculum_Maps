@@ -8,6 +8,7 @@ import re
 from collections import defaultdict, deque
 from pathlib import Path
 from typing import Dict, List, Set, Optional
+import numpy as np
 
 # ============================================================================
 # DATA STORAGE
@@ -337,13 +338,13 @@ def get_dependent_courses(course_id: str) -> List[str]:
     return sorted(set(dependents))
 
 
-def search_courses(query: str, limit: int = 20) -> List[Dict]:
+def search_courses(query: str, limit: int = None) -> List[Dict]:
     """
     Search for courses by name or code.
 
     Args:
         query: Search term
-        limit: Maximum number of results (default: 20)
+        limit: Maximum number of results
 
     Returns:
         List of matching course dictionaries
@@ -362,15 +363,22 @@ def search_courses(query: str, limit: int = 20) -> List[Dict]:
         (_courses_df["COURSE_TITLE_LONG"].str.upper(
         ).str.contains(query_upper, na=False))
     ]
+    matches = matches.drop_duplicates(subset=["SUBJECT", "CRSE_CODE"])
+    if limit is not None:
+        matches=matches.head(limit)
 
-    results = []
-    for _, row in matches.head(limit).iterrows():
-        results.append({
-            "course_id": _make_course_id(row["SUBJECT"], row["CRSE_CODE"]),
-            "course_name": row["COURSE_TITLE_LONG"],
-            "subject": row["SUBJECT"]
-        })
+    results = {}
+    for _, row in matches.iterrows():
+        subject = row["SUBJECT"]
+        number = str(row["CRSE_CODE"])
+        course_id = _make_course_id(subject, number)
 
+        results[course_id] = {
+            "course_number": number,
+            "subject": subject,
+            "course_name": row["COURSE_TITLE_LONG"]
+        }
+    
     return results
 
 
@@ -393,14 +401,17 @@ def get_courses_by_subject(subject: str) -> List[Dict]:
     subject_upper = subject.upper()
     matches = _courses_df[_courses_df["SUBJECT"].str.upper() == subject_upper]
 
-    results = []
+    results = {}
     for _, row in matches.iterrows():
-        results.append({
-            "course_id": _make_course_id(row["SUBJECT"], row["CRSE_CODE"]),
-            "course_name": row["COURSE_TITLE_LONG"],
-            "subject": row["SUBJECT"]
-        })
+        subject = row["SUBJECT"]
+        number = str(row["CRSE_CODE"])
+        course_id = _make_course_id(subject, number)
 
+        results[course_id] = {
+            "course_number": number,
+            "subject": subject,
+            "course_name": row["COURSE_TITLE_LONG"]
+        }
     return results
 
 
@@ -423,6 +434,63 @@ def get_statistics() -> Dict:
         "total_subjects": _courses_df["SUBJECT"].nunique(),
         "max_prereq_depth": max(_prereq_depth.values()) if _prereq_depth else 0
     }
+
+def adjacency_mat(prereq_groups=None):
+    """
+    Produces an adjacency matrix based on prerequisite data.
+
+    Args:
+        major: optional arguement. Deafult will create adj mat for all courses. If specified, will create adj mat for just that major.
+    Returns:
+        2 variables returned:
+            adj mat: numpy array of the adjacency matrix
+            id: what the courses are for each row and column
+    """
+    if prereq_groups is None:
+        prereq_groups = _prereq_groups
+    all_courses = set(prereq_groups.keys())
+    for groups in prereq_groups.values():
+        for group in groups:
+            for prereq in group:
+                all_courses.add(prereq)
+
+    # Sorted list ensures stable ordering
+    all_courses = sorted(all_courses)
+    index_map = {cid: i for i, cid in enumerate(all_courses)}
+
+    N = len(all_courses)
+    adj = np.zeros((N, N), dtype=int)
+
+    # Fill adjacency matrix
+    # direction: prereq → course
+    for course, groups in prereq_groups.items():
+        course_idx = index_map[course]
+        for group in groups:
+            for prereq in group:
+                if prereq in index_map:
+                    prereq_idx = index_map[prereq]
+                    adj[prereq_idx, course_idx] = 1
+
+    return adj, index_map
+
+def adj_mat_as_pd_df(adj_mat, index_map):
+    """
+    Produces an adjacency matrix in pandas dataframe format.
+
+    Args:
+        adj_mat: 2x2 numpy array/matrix showing adjacency relationships. adj_mat output from adjacency_mat function is the intended input
+        index_map: map of the course names based on index for the adjacency matrix. Intended input is id from adjacency_mat function
+    Returns:
+        adj_df: pandas dataframe of adjacency matrix with courses as row and column headers
+    """
+    course_names = list(index_map.keys())
+
+    adj_df = pd.DataFrame(
+        adj_mat,
+        index=course_names,
+        columns=course_names
+    )
+    return adj_df
 
 
 def get_graph_data(major: Optional[str] = None, max_depth: Optional[int] = None) -> Dict:
