@@ -435,7 +435,7 @@ def get_statistics() -> Dict:
         "max_prereq_depth": max(_prereq_depth.values()) if _prereq_depth else 0
     }
 
-def adjacency_mat(prereq_groups=None):
+def adjacency_mat(major: Optional[str] = None, prereq_groups=None):
     """
     Produces an adjacency matrix based on prerequisite data.
 
@@ -446,23 +446,52 @@ def adjacency_mat(prereq_groups=None):
             adj mat: numpy array of the adjacency matrix
             id: what the courses are for each row and column
     """
+    global _majors_df, _prereq_groups
+
     if prereq_groups is None:
         prereq_groups = _prereq_groups
-    all_courses = set(prereq_groups.keys())
-    for groups in prereq_groups.values():
-        for group in groups:
-            for prereq in group:
-                all_courses.add(prereq)
+    if major is None:
+        all_courses = set(prereq_groups.keys())
+        for groups in prereq_groups.values():
+            for group in groups:
+                for prereq in group:
+                    all_courses.add(prereq)
+    else:
+        if _majors_df is None:
+            raise RuntimeError("Data not loaded. Call load_data() first.")
 
-    # Sorted list ensures stable ordering
+        major_df = _majors_df[_majors_df["Major"].astype(str) == str(major)]
+        if major_df.empty:
+            raise ValueError(f"Major not found: {major}")
+
+        all_courses = set()
+        for _, row in major_df.iterrows():
+            course_str = str(row["Course"])
+            match = re.search(r"([A-Z]{2,4})\s*(\d{2,4}[A-Z]?)", course_str)
+            if match:
+                cid = f"{match.group(1).upper()} {match.group(2)}"
+                all_courses.add(cid)
+        added = True
+        while added:
+            added = False
+            for target, groups in prereq_groups.items():
+                if target in all_courses:
+                    for g in groups:
+                        for prereq in g:
+                            if prereq not in all_courses:
+                                all_courses.add(prereq)
+                                added = True
+    filtered_groups = {
+        c: [grp for grp in groups if any(p in all_courses for p in grp)]
+        for c, groups in prereq_groups.items()
+        if c in all_courses}
+
     all_courses = sorted(all_courses)
     index_map = {cid: i for i, cid in enumerate(all_courses)}
 
     N = len(all_courses)
     adj = np.zeros((N, N), dtype=int)
 
-    # Fill adjacency matrix
-    # direction: prereq → course
     for course, groups in prereq_groups.items():
         course_idx = index_map[course]
         for group in groups:
@@ -596,11 +625,12 @@ def get_major_list() -> List[Dict]:
         raise RuntimeError("Data not loaded. Call load_data() first.")
 
     major_counts = _majors_df.groupby(
-        "Major").size().reset_index(name="courses")
+        ["Major", "Major Title"]).size().reset_index(name="courses")
 
     majors = []
     for _, row in major_counts.iterrows():
         majors.append({
+            "name": row["Major Title"],
             "code": row["Major"],
             "courses": int(row["courses"])
         })
