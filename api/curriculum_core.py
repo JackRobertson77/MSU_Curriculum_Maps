@@ -297,7 +297,6 @@ def get_course(course_id: str) -> Dict:
         "name": row["COURSE_TITLE_LONG"],
         "subject": subject,
         "number": int(_extract_number(code)),
-        "code": code
     }
 
 
