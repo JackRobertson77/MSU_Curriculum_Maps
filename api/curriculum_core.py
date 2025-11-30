@@ -8,6 +8,7 @@ import re
 from collections import defaultdict, deque
 from pathlib import Path
 from typing import Dict, List, Set, Optional
+import numpy as np
 
 # ============================================================================
 # DATA STORAGE
@@ -336,36 +337,14 @@ def get_dependent_courses(course_id: str) -> List[str]:
 
     return sorted(set(dependents))
 
-def get_all_courses() -> List[Dict]:
-    """
-    Get list of all courses.
-    
-    Returns:
-        List of course dictionaries
-    
-    Raises:
-        RuntimeError: If data not loaded
-    """
-    if _courses_df is None:
-        raise RuntimeError("Data not loaded. Call load_data() first.")
-    
-    courses = []
-    for _, row in _courses_df[["SUBJECT", "CRSE_CODE", "COURSE_TITLE_LONG"]].drop_duplicates().iterrows():
-        courses.append({
-            "course_id": _make_course_id(row["SUBJECT"], row["CRSE_CODE"]),
-            "course_name": row["COURSE_TITLE_LONG"],
-            "subject": row["SUBJECT"]
-        })
-    
-    return courses
 
-def search_courses(query: str) -> List[Dict]:
+def search_courses(query: str, limit: int = None) -> List[Dict]:
     """
     Search for courses by name or code.
 
     Args:
         query: Search term
-        limit: Maximum number of results (default: 20)
+        limit: Maximum number of results
 
     Returns:
         List of matching course dictionaries
@@ -384,15 +363,22 @@ def search_courses(query: str) -> List[Dict]:
         (_courses_df["COURSE_TITLE_LONG"].str.upper(
         ).str.contains(query_upper, na=False))
     ]
+    matches = matches.drop_duplicates(subset=["SUBJECT", "CRSE_CODE"])
+    if limit is not None:
+        matches=matches.head(limit)
 
-    results = []
-    for _, row in matches.head(limit).iterrows():
-        results.append({
-            "course_id": _make_course_id(row["SUBJECT"], row["CRSE_CODE"]),
-            "course_name": row["COURSE_TITLE_LONG"],
-            "subject": row["SUBJECT"]
-        })
+    results = {}
+    for _, row in matches.iterrows():
+        subject = row["SUBJECT"]
+        number = str(row["CRSE_CODE"])
+        course_id = _make_course_id(subject, number)
 
+        results[course_id] = {
+            "course_number": number,
+            "subject": subject,
+            "course_name": row["COURSE_TITLE_LONG"]
+        }
+    
     return results
 
 
@@ -415,14 +401,17 @@ def get_courses_by_subject(subject: str) -> List[Dict]:
     subject_upper = subject.upper()
     matches = _courses_df[_courses_df["SUBJECT"].str.upper() == subject_upper]
 
-    results = []
+    results = {}
     for _, row in matches.iterrows():
-        results.append({
-            "course_id": _make_course_id(row["SUBJECT"], row["CRSE_CODE"]),
-            "course_name": row["COURSE_TITLE_LONG"],
-            "subject": row["SUBJECT"]
-        })
+        subject = row["SUBJECT"]
+        number = str(row["CRSE_CODE"])
+        course_id = _make_course_id(subject, number)
 
+        results[course_id] = {
+            "course_number": number,
+            "subject": subject,
+            "course_name": row["COURSE_TITLE_LONG"]
+        }
     return results
 
 
@@ -445,6 +434,92 @@ def get_statistics() -> Dict:
         "total_subjects": _courses_df["SUBJECT"].nunique(),
         "max_prereq_depth": max(_prereq_depth.values()) if _prereq_depth else 0
     }
+
+def adjacency_mat(major: Optional[str] = None, prereq_groups=None):
+    """
+    Produces an adjacency matrix based on prerequisite data.
+
+    Args:
+        major: optional arguement. Deafult will create adj mat for all courses. If specified, will create adj mat for just that major.
+    Returns:
+        2 variables returned:
+            adj mat: numpy array of the adjacency matrix
+            id: what the courses are for each row and column
+    """
+    global _majors_df, _prereq_groups
+
+    if prereq_groups is None:
+        prereq_groups = _prereq_groups
+    if major is None:
+        all_courses = set(prereq_groups.keys())
+        for groups in prereq_groups.values():
+            for group in groups:
+                for prereq in group:
+                    all_courses.add(prereq)
+    else:
+        if _majors_df is None:
+            raise RuntimeError("Data not loaded. Call load_data() first.")
+
+        major_df = _majors_df[_majors_df["Major"].astype(str) == str(major)]
+        if major_df.empty:
+            raise ValueError(f"Major not found: {major}")
+
+        all_courses = set()
+        for _, row in major_df.iterrows():
+            course_str = str(row["Course"])
+            match = re.search(r"([A-Z]{2,4})\s*(\d{2,4}[A-Z]?)", course_str)
+            if match:
+                cid = f"{match.group(1).upper()} {match.group(2)}"
+                all_courses.add(cid)
+        added = True
+        while added:
+            added = False
+            for target, groups in prereq_groups.items():
+                if target in all_courses:
+                    for g in groups:
+                        for prereq in g:
+                            if prereq not in all_courses:
+                                all_courses.add(prereq)
+                                added = True
+    filtered_groups = {
+        c: [grp for grp in groups if any(p in all_courses for p in grp)]
+        for c, groups in prereq_groups.items()
+        if c in all_courses}
+
+    all_courses = sorted(all_courses)
+    index_map = {cid: i for i, cid in enumerate(all_courses)}
+
+    N = len(all_courses)
+    adj = np.zeros((N, N), dtype=int)
+
+    for course, groups in prereq_groups.items():
+        course_idx = index_map[course]
+        for group in groups:
+            for prereq in group:
+                if prereq in index_map:
+                    prereq_idx = index_map[prereq]
+                    adj[prereq_idx, course_idx] = 1
+
+    return adj, index_map
+
+def adj_mat_as_pd_df(adj_mat, index_map):
+    """
+    Produces an adjacency matrix in pandas dataframe format.
+
+    Args:
+        adj_mat: 2x2 numpy array/matrix showing adjacency relationships. adj_mat output from adjacency_mat function is the intended input
+        index_map: map of the course names based on index for the adjacency matrix. Intended input is id from adjacency_mat function
+    Returns:
+        adj_df: pandas dataframe of adjacency matrix with courses as row and column headers
+    """
+    course_names = list(index_map.keys())
+
+    adj_df = pd.DataFrame(
+        adj_mat,
+        index=course_names,
+        columns=course_names
+    )
+    return adj_df
 
 
 def get_graph_data(major: Optional[str] = None, max_depth: Optional[int] = None) -> Dict:
@@ -550,11 +625,12 @@ def get_major_list() -> List[Dict]:
         raise RuntimeError("Data not loaded. Call load_data() first.")
 
     major_counts = _majors_df.groupby(
-        "Major").size().reset_index(name="courses")
+        ["Major", "Major Title"]).size().reset_index(name="courses")
 
     majors = []
     for _, row in major_counts.iterrows():
         majors.append({
+            "name": row["Major Title"],
             "code": row["Major"],
             "courses": int(row["courses"])
         })
@@ -972,7 +1048,6 @@ __all__ = [
     'get_course',
     'get_prerequisites',
     'get_dependent_courses',
-    'get_all_courses',
     'search_courses',
     'get_courses_by_subject',
     'get_statistics',
@@ -991,13 +1066,16 @@ if __name__ == "__main__":
     print("=" * 70)
     print("\nTo use this API:")
     print("  import curriculum_core as api")
-    print("  api.load_data('registrar.csv', 'get.xlsx')")
+    print("  api.load_data('registrar.csv', 'majors.xlsx')")
     print("  api.get_prerequisites('CSE 232')")
     print("\nTo visualize a curriculum:")
     print("  graph_data = api.get_graph_data(major='7105')")
     print("  api.visualize_graph(graph_data, layout='hierarchical')")
     print("\nTo see a demo:")
     print("  api.demo()")
+    print("\nFor quick help:")
+    print("  api.help_quick()")
+    print("\n" + "=" * 70)
     print("\nFor quick help:")
     print("  api.help_quick()")
     print("\n" + "=" * 70)
