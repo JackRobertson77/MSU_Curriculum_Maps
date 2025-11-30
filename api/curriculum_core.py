@@ -8,7 +8,6 @@ import re
 from collections import defaultdict, deque
 from pathlib import Path
 from typing import Dict, List, Set, Optional
-import numpy as np
 
 # ============================================================================
 # DATA STORAGE
@@ -18,6 +17,8 @@ _courses_df: Optional[pd.DataFrame] = None
 _majors_df: Optional[pd.DataFrame] = None
 _prereq_groups: Dict[str, List[Set[str]]] = {}
 _prereq_depth: Dict[str, int] = {}
+_forward_adj: Dict[str, List[str]] = {}
+_backward_adj: Dict[str, List[Set[str]]] = {}
 
 # ============================================================================
 # HELPER FUNCTIONS
@@ -39,7 +40,16 @@ def _norm_course(token: str) -> str:
     return token.upper()
 
 
-def _extract_prereq_groups(registrar_df: pd.DataFrame) -> Dict[str, List[Set[str]]]:
+def _extract_number(code: str) -> int:
+    """Extract numeric part of course code for sorting"""
+    code_str = str(code).strip()
+    code_str = re.sub(r"\.0$", "", code_str)
+    match = re.match(r"(\d+)", code_str)
+    return int(match.group(1)) if match else 0
+
+
+def _extract_prereq_groups(
+        registrar_df: pd.DataFrame) -> Dict[str, List[Set[str]]]:
     """
     Extract prerequisite relationships preserving AND/OR logic.
     """
@@ -114,7 +124,24 @@ def _extract_prereq_groups(registrar_df: pd.DataFrame) -> Dict[str, List[Set[str
     return dict(prereq_groups)
 
 
-def _format_prerequisites(prereq_groups: Dict[str, List[Set[str]]], course_id: str) -> str:
+def _build_adjacency_lists(prereq_groups: Dict[str, List[Set[str]]]):
+    """Build forward and backward adjacency lists for O(1) lookups"""
+    global _forward_adj, _backward_adj
+
+    _backward_adj = prereq_groups.copy()
+
+    _forward_adj = defaultdict(list)
+    for course, prereq_list in prereq_groups.items():
+        for group in prereq_list:
+            for prereq in group:
+                if course not in _forward_adj[prereq]:
+                    _forward_adj[prereq].append(course)
+
+    _forward_adj = dict(_forward_adj)
+
+
+def _format_prerequisites(
+        prereq_groups: Dict[str, List[Set[str]]], course_id: str) -> str:
     """Format prerequisites as human-readable string with AND/OR logic"""
     course_id_upper = course_id.upper()
     if course_id_upper not in prereq_groups or not prereq_groups[course_id_upper]:
@@ -135,7 +162,8 @@ def _format_prerequisites(prereq_groups: Dict[str, List[Set[str]]], course_id: s
         return " and ".join(formatted_groups)
 
 
-def _compute_prerequisite_depth(prereq_groups: Dict[str, List[Set[str]]]) -> Dict[str, int]:
+def _compute_prerequisite_depth(
+        prereq_groups: Dict[str, List[Set[str]]]) -> Dict[str, int]:
     """Compute prerequisite depth using topological sort"""
     edges = defaultdict(set)
     all_courses = set()
@@ -172,7 +200,10 @@ def _compute_prerequisite_depth(prereq_groups: Dict[str, List[Set[str]]]) -> Dic
 # API FUNCTIONS
 # ============================================================================
 
-def load_data(registrar_path: str, majors_path: str, verbose: bool = True) -> None:
+def load_data(
+        registrar_path: str,
+        majors_path: str,
+        verbose: bool = True) -> None:
     """
     Load course and major data from files.
 
@@ -197,7 +228,7 @@ def load_data(registrar_path: str, majors_path: str, verbose: bool = True) -> No
 
     try:
         _courses_df = pd.read_csv(registrar_path, encoding="latin1")
-    except:
+    except BaseException:
         _courses_df = pd.read_csv(registrar_path, encoding="utf-8")
 
     if verbose:
@@ -219,9 +250,13 @@ def load_data(registrar_path: str, majors_path: str, verbose: bool = True) -> No
     _prereq_groups = _extract_prereq_groups(_courses_df)
     _prereq_depth = _compute_prerequisite_depth(_prereq_groups)
 
+    _build_adjacency_lists(_prereq_groups)
+
     if verbose:
         print(
-            f"Loaded {len(_courses_df)} courses, {len(_prereq_groups)} with prerequisites")
+            f"Loaded {
+                len(_courses_df)} courses, {
+                len(_prereq_groups)} with prerequisites")
 
 
 def get_course(course_id: str) -> Dict:
@@ -232,11 +267,7 @@ def get_course(course_id: str) -> Dict:
         course_id: Course ID (e.g., "CSE 232", "MTH-234")
 
     Returns:
-        Dictionary containing:
-            - course_id: Standardized course ID
-            - course_name: Full course name
-            - subject: Subject code (e.g., "CSE")
-            - course_code: Course number (e.g., "232")
+        Dictionary containing course information (now as dict value, not in list)
 
     Raises:
         RuntimeError: If data not loaded (call load_data() first)
@@ -261,27 +292,82 @@ def get_course(course_id: str) -> Dict:
         raise ValueError(f"Course not found: {course_id}")
 
     row = course_data.iloc[0]
+
     return {
-        "course_id": f"{subject} {code}",
-        "course_name": row["COURSE_TITLE_LONG"],
+        "name": row["COURSE_TITLE_LONG"],
         "subject": subject,
-        "course_code": code
+        "number": int(_extract_number(code)),
+        "code": code
     }
 
 
-def get_prerequisites(course_id: str) -> Dict:
+def get_prerequisites(course_id: str) -> Dict[str, Dict]:
     """
-    Get prerequisites for a course.
+    Get prerequisites for a course as dict-of-dicts.
+    CHANGED: Now returns dict-of-dicts format like everything else
 
     Args:
         course_id: Course ID (e.g., "CSE 232")
 
     Returns:
-        Dictionary containing:
-            - course_id: Course ID
-            - prerequisites: List of prerequisite groups (list of lists)
-            - formatted: Human-readable prerequisite string
-            - depth: Prerequisite depth (0 = no prerequisites)
+        Dict where key=prerequisite course_id, value=course data
+
+    Raises:
+        RuntimeError: If data not loaded
+    """
+    if _prereq_groups is None or _courses_df is None:
+        raise RuntimeError("Data not loaded. Call load_data() first.")
+
+    course_id_upper = course_id.upper().replace("-", " ")
+
+    if course_id_upper not in _prereq_groups:
+        return {}
+
+    prereq_courses = {}
+    for group in _prereq_groups[course_id_upper]:
+        for prereq_id in group:
+            if prereq_id not in prereq_courses:
+
+                try:
+                    match = re.match(
+                        r'([A-Z]{2,4})\s*(\d{2,4}[A-Z]?)', prereq_id)
+                    if match:
+                        subject, code = match.groups()
+                        course_data = _courses_df[
+                            (_courses_df["SUBJECT"].str.upper() == subject) &
+                            (_courses_df["CRSE_CODE"].astype(str).str.replace(".0", "") == code)
+                        ]
+                        if not course_data.empty:
+                            row = course_data.iloc[0]
+                            prereq_courses[prereq_id] = {
+                                "name": row["COURSE_TITLE_LONG"],
+                                "subject": subject,
+                                "number": int(_extract_number(code))
+                            }
+                except BaseException:
+
+                    prereq_courses[prereq_id] = {
+                        "name": "Unknown",
+                        "subject": prereq_id.split()[0] if ' ' in prereq_id else "",
+                        "number": int(_extract_number(prereq_id.split()[-1])) if ' ' in prereq_id else 0
+                    }
+
+    return prereq_courses
+
+
+def get_prerequisite_details(course_id: str) -> Dict:
+    """
+    Get detailed prerequisite information including AND/OR logic.
+
+    Args:
+        course_id: Course ID (e.g., "CSE 232")
+
+    Returns:
+        Dictionary with:
+            - prerequisite_groups: List of groups (AND of ORs)
+            - formatted: Human-readable string
+            - depth: Prerequisite depth
+            - total_count: Total number of prerequisite courses
 
     Raises:
         RuntimeError: If data not loaded
@@ -293,61 +379,115 @@ def get_prerequisites(course_id: str) -> Dict:
 
     if course_id_upper not in _prereq_groups:
         return {
-            "course_id": course_id_upper,
-            "prerequisites": [],
+            "prerequisite_groups": [],
             "formatted": "None",
-            "depth": 0
+            "depth": 0,
+            "total_count": 0
         }
 
     groups = _prereq_groups[course_id_upper]
     prereq_list = [sorted(list(group)) for group in groups]
 
+    all_prereqs = set()
+    for group in groups:
+        all_prereqs.update(group)
+
     return {
-        "course_id": course_id_upper,
-        "prerequisites": prereq_list,
+        "prerequisite_groups": prereq_list,
         "formatted": _format_prerequisites(_prereq_groups, course_id_upper),
-        "depth": _prereq_depth.get(course_id_upper, 0)
+        "depth": int(_prereq_depth.get(course_id_upper, 0)),
+        "total_count": len(all_prereqs)
     }
 
 
-def get_dependent_courses(course_id: str) -> List[str]:
+def get_dependent_courses(course_id: str) -> Dict[str, Dict]:
     """
     Get courses that require this course as a prerequisite.
+    NOW USES ADJACENCY LIST FOR O(1) LOOKUP!
+    CHANGED: Returns dict-of-dicts like everything else
 
     Args:
         course_id: Course ID (e.g., "MTH 132")
 
     Returns:
-        List of course IDs that depend on this course
+        Dict where key=dependent course_id, value=course data
 
     Raises:
         RuntimeError: If data not loaded
     """
-    if _prereq_groups is None:
+    if _forward_adj is None or _courses_df is None:
         raise RuntimeError("Data not loaded. Call load_data() first.")
 
     course_id_upper = course_id.upper().replace("-", " ")
 
-    dependents = []
-    for target, groups in _prereq_groups.items():
-        for group in groups:
-            if course_id_upper in group:
-                dependents.append(target)
-                break
+    dependent_ids = _forward_adj.get(course_id_upper, [])
 
-    return sorted(set(dependents))
+    dependent_courses = {}
+    for dep_id in dependent_ids:
+        try:
+            match = re.match(r'([A-Z]{2,4})\s*(\d{2,4}[A-Z]?)', dep_id)
+            if match:
+                subject, code = match.groups()
+                course_data = _courses_df[
+                    (_courses_df["SUBJECT"].str.upper() == subject) &
+                    (_courses_df["CRSE_CODE"].astype(str).str.replace(".0", "") == code)
+                ]
+                if not course_data.empty:
+                    row = course_data.iloc[0]
+                    dependent_courses[dep_id] = {
+                        "name": row["COURSE_TITLE_LONG"],
+                        "subject": subject,
+                        "number": int(_extract_number(code))
+                    }
+        except BaseException:
+
+            dependent_courses[dep_id] = {
+                "name": "Unknown",
+                "subject": dep_id.split()[0] if ' ' in dep_id else "",
+                "number": int(_extract_number(dep_id.split()[-1])) if ' ' in dep_id else 0
+            }
+
+    return dependent_courses
 
 
-def search_courses(query: str, limit: int = None) -> List[Dict]:
+def get_all_courses() -> Dict[str, Dict]:
+    """
+    Get all courses as dict-of-dicts (CHANGED FROM LIST).
+
+    Returns:
+        Dict where key=course_id, value=course data
+
+    Raises:
+        RuntimeError: If data not loaded
+    """
+    if _courses_df is None:
+        raise RuntimeError("Data not loaded. Call load_data() first.")
+
+    courses = {}
+    for _, row in _courses_df[["SUBJECT", "CRSE_CODE",
+                               "COURSE_TITLE_LONG"]].drop_duplicates().iterrows():
+        course_id = _make_course_id(row["SUBJECT"], row["CRSE_CODE"])
+        courses[course_id] = {
+            "name": row["COURSE_TITLE_LONG"],
+            "subject": row["SUBJECT"],
+
+            "number": int(_extract_number(row["CRSE_CODE"]))
+        }
+
+    return courses
+
+
+def search_courses(query: str, limit: int = 20) -> Dict[str, Dict]:
     """
     Search for courses by name or code.
+    CHANGED: Returns dict-of-dicts instead of list
 
     Args:
         query: Search term
-        limit: Maximum number of results
+        limit: Maximum number of results (default: 20)
 
     Returns:
-        List of matching course dictionaries
+        Dict of matching courses where key=course_id
 
     Raises:
         RuntimeError: If data not loaded
@@ -363,34 +503,31 @@ def search_courses(query: str, limit: int = None) -> List[Dict]:
         (_courses_df["COURSE_TITLE_LONG"].str.upper(
         ).str.contains(query_upper, na=False))
     ]
+
     matches = matches.drop_duplicates(subset=["SUBJECT", "CRSE_CODE"])
-    if limit is not None:
-        matches=matches.head(limit)
 
     results = {}
-    for _, row in matches.iterrows():
-        subject = row["SUBJECT"]
-        number = str(row["CRSE_CODE"])
-        course_id = _make_course_id(subject, number)
-
+    for _, row in matches.head(limit).iterrows():
+        course_id = _make_course_id(row["SUBJECT"], row["CRSE_CODE"])
         results[course_id] = {
-            "course_number": number,
-            "subject": subject,
-            "course_name": row["COURSE_TITLE_LONG"]
+            "name": row["COURSE_TITLE_LONG"],
+            "subject": row["SUBJECT"],
+            "number": int(_extract_number(row["CRSE_CODE"]))
         }
-    
+
     return results
 
 
-def get_courses_by_subject(subject: str) -> List[Dict]:
+def get_courses_by_subject(subject: str) -> Dict[str, Dict]:
     """
     Get all courses for a specific subject.
+    CHANGED: Returns dict-of-dicts instead of list
 
     Args:
         subject: Subject code (e.g., "CSE", "MTH")
 
     Returns:
-        List of course dictionaries
+        Dict of courses where key=course_id
 
     Raises:
         RuntimeError: If data not loaded
@@ -403,15 +540,13 @@ def get_courses_by_subject(subject: str) -> List[Dict]:
 
     results = {}
     for _, row in matches.iterrows():
-        subject = row["SUBJECT"]
-        number = str(row["CRSE_CODE"])
-        course_id = _make_course_id(subject, number)
-
+        course_id = _make_course_id(row["SUBJECT"], row["CRSE_CODE"])
         results[course_id] = {
-            "course_number": number,
-            "subject": subject,
-            "course_name": row["COURSE_TITLE_LONG"]
+            "name": row["COURSE_TITLE_LONG"],
+            "subject": row["SUBJECT"],
+            "number": int(_extract_number(row["CRSE_CODE"]))
         }
+
     return results
 
 
@@ -420,7 +555,7 @@ def get_statistics() -> Dict:
     Get statistics about loaded data.
 
     Returns:
-        Dictionary with statistics
+        Dictionary with statistics (numpy ints converted to Python ints)
 
     Raises:
         RuntimeError: If data not loaded
@@ -429,109 +564,25 @@ def get_statistics() -> Dict:
         raise RuntimeError("Data not loaded. Call load_data() first.")
 
     return {
-        "total_courses": len(_courses_df),
-        "courses_with_prereqs": len(_prereq_groups),
-        "total_subjects": _courses_df["SUBJECT"].nunique(),
-        "max_prereq_depth": max(_prereq_depth.values()) if _prereq_depth else 0
+        "total_courses": int(len(_courses_df)),
+        "courses_with_prereqs": int(len(_prereq_groups)),
+        "total_subjects": int(_courses_df["SUBJECT"].nunique()),
+        "max_prereq_depth": int(max(_prereq_depth.values())) if _prereq_depth else 0
     }
 
-def adjacency_mat(major: Optional[str] = None, prereq_groups=None):
-    """
-    Produces an adjacency matrix based on prerequisite data.
 
-    Args:
-        major: optional arguement. Deafult will create adj mat for all courses. If specified, will create adj mat for just that major.
-    Returns:
-        2 variables returned:
-            adj mat: numpy array of the adjacency matrix
-            id: what the courses are for each row and column
-    """
-    global _majors_df, _prereq_groups
-
-    if prereq_groups is None:
-        prereq_groups = _prereq_groups
-    if major is None:
-        all_courses = set(prereq_groups.keys())
-        for groups in prereq_groups.values():
-            for group in groups:
-                for prereq in group:
-                    all_courses.add(prereq)
-    else:
-        if _majors_df is None:
-            raise RuntimeError("Data not loaded. Call load_data() first.")
-
-        major_df = _majors_df[_majors_df["Major"].astype(str) == str(major)]
-        if major_df.empty:
-            raise ValueError(f"Major not found: {major}")
-
-        all_courses = set()
-        for _, row in major_df.iterrows():
-            course_str = str(row["Course"])
-            match = re.search(r"([A-Z]{2,4})\s*(\d{2,4}[A-Z]?)", course_str)
-            if match:
-                cid = f"{match.group(1).upper()} {match.group(2)}"
-                all_courses.add(cid)
-        added = True
-        while added:
-            added = False
-            for target, groups in prereq_groups.items():
-                if target in all_courses:
-                    for g in groups:
-                        for prereq in g:
-                            if prereq not in all_courses:
-                                all_courses.add(prereq)
-                                added = True
-    filtered_groups = {
-        c: [grp for grp in groups if any(p in all_courses for p in grp)]
-        for c, groups in prereq_groups.items()
-        if c in all_courses}
-
-    all_courses = sorted(all_courses)
-    index_map = {cid: i for i, cid in enumerate(all_courses)}
-
-    N = len(all_courses)
-    adj = np.zeros((N, N), dtype=int)
-
-    for course, groups in prereq_groups.items():
-        course_idx = index_map[course]
-        for group in groups:
-            for prereq in group:
-                if prereq in index_map:
-                    prereq_idx = index_map[prereq]
-                    adj[prereq_idx, course_idx] = 1
-
-    return adj, index_map
-
-def adj_mat_as_pd_df(adj_mat, index_map):
-    """
-    Produces an adjacency matrix in pandas dataframe format.
-
-    Args:
-        adj_mat: 2x2 numpy array/matrix showing adjacency relationships. adj_mat output from adjacency_mat function is the intended input
-        index_map: map of the course names based on index for the adjacency matrix. Intended input is id from adjacency_mat function
-    Returns:
-        adj_df: pandas dataframe of adjacency matrix with courses as row and column headers
-    """
-    course_names = list(index_map.keys())
-
-    adj_df = pd.DataFrame(
-        adj_mat,
-        index=course_names,
-        columns=course_names
-    )
-    return adj_df
-
-
-def get_graph_data(major: Optional[str] = None, max_depth: Optional[int] = None) -> Dict:
+def get_graph_data(
+        major: Optional[str] = None,
+        max_depth: Optional[int] = None) -> Dict:
     """
     Get graph data for visualization (nodes and edges).
 
     Args:
-        major: Optional major code to filter by (e.g., "CHEMBS")
+        major: Optional major code to filter by (e.g., "7105")
         max_depth: Optional maximum prerequisite depth to include
 
     Returns:
-        Dictionary with 'nodes' and 'edges' lists for graph visualization
+        Dictionary with 'nodes' (dict-of-dicts) and 'edges' lists
 
     Raises:
         RuntimeError: If data not loaded
@@ -546,7 +597,7 @@ def get_graph_data(major: Optional[str] = None, max_depth: Optional[int] = None)
         if df.empty:
             raise ValueError(f"Major not found: {major}")
 
-    nodes = []
+    nodes = {}
     seen_courses = set()
 
     for _, row in df.iterrows():
@@ -580,18 +631,16 @@ def get_graph_data(major: Optional[str] = None, max_depth: Optional[int] = None)
                 year = year_level
                 break
 
-        nodes.append({
-            "id": course_id,
-            "label": course_id,
-            "title": course_name,
+        nodes[course_id] = {
+            "name": course_name,
             "major": major,
             "year": year,
             "term": term,
-            "depth": depth
-        })
+            "depth": int(depth)
+        }
 
     edges = []
-    course_ids = {node["id"].upper() for node in nodes}
+    course_ids = set(nodes.keys())
 
     for target, groups in _prereq_groups.items():
         if target not in course_ids:
@@ -611,12 +660,13 @@ def get_graph_data(major: Optional[str] = None, max_depth: Optional[int] = None)
     }
 
 
-def get_major_list() -> List[Dict]:
+def get_major_list() -> Dict[str, Dict]:
     """
     Get list of all available majors.
+    CHANGED: Returns dict-of-dicts with major names
 
     Returns:
-        List of major dictionaries with code and course count
+        Dict where key=major_code, value=major info
 
     Raises:
         RuntimeError: If data not loaded
@@ -625,17 +675,110 @@ def get_major_list() -> List[Dict]:
         raise RuntimeError("Data not loaded. Call load_data() first.")
 
     major_counts = _majors_df.groupby(
-        ["Major", "Major Title"]).size().reset_index(name="courses")
+        "Major").size().reset_index(name="courses")
 
-    majors = []
+    majors = {}
     for _, row in major_counts.iterrows():
-        majors.append({
-            "name": row["Major Title"],
-            "code": row["Major"],
+        major_code = str(row["Major"])
+        majors[major_code] = {
+            # TODO: Add actual major names if available
+            "name": f"Major {major_code}",
             "courses": int(row["courses"])
-        })
+        }
 
-    return sorted(majors, key=lambda x: x["code"])
+    return majors
+
+
+# ============================================================================
+# NEW FUNCTIONS
+# ============================================================================
+
+def detect_cycles() -> List[List[str]]:
+    """
+    Detect cycles in prerequisite graph using NetworkX.
+    NEW FUNCTION!
+
+    Returns:
+        List of cycles (each cycle is a list of course IDs)
+
+    Raises:
+        RuntimeError: If data not loaded
+        ImportError: If NetworkX not installed
+    """
+    if _prereq_groups is None:
+        raise RuntimeError("Data not loaded. Call load_data() first.")
+
+    try:
+        import networkx as nx
+    except ImportError:
+        raise ImportError(
+            "NetworkX required. Install with: pip install networkx")
+
+    # Build graph
+    G = nx.DiGraph()
+    for course, prereq_list in _prereq_groups.items():
+        for group in prereq_list:
+            for prereq in group:
+                G.add_edge(prereq, course)
+
+    # Find cycles
+    try:
+        cycles = list(nx.simple_cycles(G))
+        return sorted(cycles, key=lambda x: (len(x), x[0]))
+    except BaseException:
+        return []
+
+
+def get_bottleneck_courses(
+        major: Optional[str] = None, top_n: int = 10) -> Dict[str, Dict]:
+    """
+    Find bottleneck courses - courses that block the most other courses.
+    NEW FUNCTION!
+
+    These are critical path courses that should be taken early.
+
+    Args:
+        major: Optional major code to filter by
+        top_n: Number of top bottlenecks to return
+
+    Returns:
+        Dict where key=course_id, value={blocks: count, dependent_courses: [...]}
+
+    Raises:
+        RuntimeError: If data not loaded
+    """
+    if _forward_adj is None:
+        raise RuntimeError("Data not loaded. Call load_data() first.")
+
+    # Get courses for major if specified
+    if major:
+        graph_data = get_graph_data(major=major)
+        relevant_courses = set(graph_data["nodes"].keys())
+    else:
+        relevant_courses = set(_forward_adj.keys())
+
+    # Count how many courses each prerequisite blocks
+    bottlenecks = {}
+    for course_id in relevant_courses:
+        dependents = _forward_adj.get(course_id, [])
+        if dependents:
+            # Filter to only courses in the major
+            if major:
+                dependents = [d for d in dependents if d in relevant_courses]
+            if dependents:
+                bottlenecks[course_id] = {
+                    "blocks": len(dependents),
+                    "dependent_courses": sorted(dependents)
+                }
+
+    # Sort by number of courses blocked
+    sorted_bottlenecks = dict(sorted(
+        bottlenecks.items(),
+        key=lambda x: x[1]["blocks"],
+        reverse=True
+    )[:top_n])
+
+    return sorted_bottlenecks
 
 
 # ============================================================================
@@ -665,14 +808,13 @@ def create_graph(graph_data: Dict, layout: str = "spring", **kwargs):
 
     G = nx.DiGraph()
 
-    # Add nodes with attributes
-    for node in graph_data['nodes']:
+    for course_id, node_data in graph_data['nodes'].items():
         G.add_node(
-            node['id'],
-            title=node.get('title', ''),
-            year=node.get('year', 'Unknown'),
-            term=node.get('term', 'Unknown'),
-            depth=node.get('depth', 0)
+            course_id,
+            title=node_data.get('name', ''),
+            year=node_data.get('year', 'Unknown'),
+            term=node_data.get('term', 'Unknown'),
+            depth=node_data.get('depth', 0)
         )
 
     # Add edges
@@ -691,13 +833,11 @@ def create_graph(graph_data: Dict, layout: str = "spring", **kwargs):
         pos = {}
         depth_groups = {}
 
-        for node_id in G.nodes():
-            node_data = [n for n in graph_data['nodes']
-                         if n['id'] == node_id][0]
+        for course_id, node_data in graph_data['nodes'].items():
             depth = node_data['depth']
             if depth not in depth_groups:
                 depth_groups[depth] = []
-            depth_groups[depth].append(node_id)
+            depth_groups[depth].append(course_id)
 
         for depth, nodes in depth_groups.items():
             for i, node_id in enumerate(nodes):
@@ -717,7 +857,7 @@ def create_graph(graph_data: Dict, layout: str = "spring", **kwargs):
 
 def visualize_graph(graph_data: Dict,
                     layout: str = "spring",
-                    color_by: str = "year",
+                    color_by: str = "depth",
                     figsize: tuple = (20, 15),
                     title: Optional[str] = None,
                     save_path: Optional[str] = None,
@@ -753,7 +893,6 @@ def visualize_graph(graph_data: Dict,
     # Create graph
     G, pos = create_graph(graph_data, layout=layout, **kwargs)
 
-    # Determine node colors
     if color_by == "year":
         year_colors = {
             'Freshman': '#4CAF50',
@@ -764,20 +903,22 @@ def visualize_graph(graph_data: Dict,
         }
         node_colors = []
         for node_id in G.nodes():
-            node_data = [n for n in graph_data['nodes']
-                         if n['id'] == node_id][0]
+            node_data = graph_data['nodes'][node_id]
             year = node_data.get('year', 'Unknown')
             node_colors.append(year_colors.get(year, '#9E9E9E'))
 
-        legend_elements = [Patch(facecolor=color, label=year)
-                           for year, color in year_colors.items()
-                           if year in {n['year'] for n in graph_data['nodes']}]
+        legend_elements = [
+            Patch(
+                facecolor=color,
+                label=year) for year,
+            color in year_colors.items() if year in {
+                n['year'] for n in graph_data['nodes'].values()}]
 
     elif color_by == "depth":
         import matplotlib.cm as cm
         import matplotlib.colors as mcolors
 
-        depths = [n['depth'] for n in graph_data['nodes']]
+        depths = [n['depth'] for n in graph_data['nodes'].values()]
         max_depth = max(depths) if depths else 1
 
         cmap = cm.get_cmap('viridis')
@@ -785,8 +926,7 @@ def visualize_graph(graph_data: Dict,
 
         node_colors = []
         for node_id in G.nodes():
-            node_data = [n for n in graph_data['nodes']
-                         if n['id'] == node_id][0]
+            node_data = graph_data['nodes'][node_id]
             depth = node_data.get('depth', 0)
             node_colors.append(cmap(norm(depth)))
 
@@ -817,8 +957,11 @@ def visualize_graph(graph_data: Dict,
 
     # Add title
     if title is None:
-        major = graph_data['nodes'][0].get(
-            'major', 'Unknown') if graph_data['nodes'] else 'Unknown'
+        if graph_data['nodes']:
+            first_node = next(iter(graph_data['nodes'].values()))
+            major = first_node.get('major', 'Unknown')
+        else:
+            major = 'Unknown'
         title = f"{major} - Prerequisite Flow ({layout.title()} Layout)"
     ax.set_title(title, fontsize=16, fontweight='bold')
     ax.axis('off')
@@ -850,13 +993,7 @@ def analyze_graph(graph_data: Dict, top_n: int = 10) -> Dict:
         top_n: Number of top courses to return in rankings
 
     Returns:
-        Dictionary with analysis results:
-            - total_courses: Total number of courses
-            - total_prerequisites: Total prerequisite relationships
-            - courses_with_most_prereqs: List of (course_id, count) tuples
-            - most_required_courses: List of (course_id, count) tuples
-            - max_depth: Maximum prerequisite depth
-            - avg_depth: Average prerequisite depth
+        Dictionary with analysis results
 
     Requires:
         networkx (import networkx as nx)
@@ -873,7 +1010,7 @@ def analyze_graph(graph_data: Dict, top_n: int = 10) -> Dict:
     prereq_counts = {node: G.in_degree(node) for node in G.nodes()}
     dependent_counts = {node: G.out_degree(node) for node in G.nodes()}
 
-    depths = [n['depth'] for n in graph_data['nodes']]
+    depths = [n['depth'] for n in graph_data['nodes'].values()]
 
     return {
         "total_courses": G.number_of_nodes(),
@@ -903,9 +1040,9 @@ def print_graph_analysis(graph_data: Dict, top_n: int = 10):
     """
     analysis = analyze_graph(graph_data, top_n=top_n)
 
-    print("="*70)
+    print("=" * 70)
     print("CURRICULUM GRAPH ANALYSIS")
-    print("="*70)
+    print("=" * 70)
 
     print(f"\nOverview:")
     print(f"  Total Courses: {analysis['total_courses']}")
@@ -916,16 +1053,16 @@ def print_graph_analysis(graph_data: Dict, top_n: int = 10):
     print(f"\nCourses with Most Prerequisites:")
     for course_id, count in analysis['courses_with_most_prereqs']:
         if count > 0:
-            prereqs = get_prerequisites(course_id)
+            prereq_details = get_prerequisite_details(course_id)
             print(f"  {course_id}: {count} prerequisites")
-            print(f"    → {prereqs['formatted']}")
+            print(f"    → {prereq_details['formatted']}")
 
     print(f"\nMost Required Courses (as prerequisites):")
     for course_id, count in analysis['most_required_courses']:
         if count > 0:
             print(f"  {course_id}: required by {count} courses")
 
-    print("="*70)
+    print("=" * 70)
 
 
 # ============================================================================
@@ -936,9 +1073,9 @@ def demo():
     """
     Run a quick demonstration of the API including graph visualization.
     """
-    print("="*70)
+    print("=" * 70)
     print("MSU Curriculum Core API - Demo")
-    print("="*70)
+    print("=" * 70)
 
     print("\nLoading data...")
     load_data("20250919_Registrars_Data(in).csv",
@@ -954,30 +1091,51 @@ def demo():
 
     print("\nGetting CSE 232 information:")
     course = get_course("CSE 232")
-    print(f"{course['course_id']}: {course['course_name']}")
+    print(f"CSE 232: {course['name']}")
+    print(f"  Subject: {course['subject']}, Number: {course['number']}")
 
-    print("\nCSE 232 prerequisites:")
+    print("\nCSE 232 prerequisites (dict-of-dicts):")
     prereqs = get_prerequisites("CSE 232")
-    print(f"{prereqs['formatted']}")
-    print(f"Depth: {prereqs['depth']}")
+    print(f"  Found {len(prereqs)} prerequisite courses:")
+    for prereq_id, data in list(prereqs.items())[:3]:
+        print(f"    - {prereq_id}: {data['name']}")
 
-    print("\nSearching for 'calculus' courses:")
+    # Get detailed info with AND/OR logic
+    prereq_details = get_prerequisite_details("CSE 232")
+    print(f"  Formatted: {prereq_details['formatted']}")
+    print(f"  Depth: {prereq_details['depth']}")
+
+    print("\nSearching for 'calculus' courses (now returns dict):")
     results = search_courses("calculus", limit=3)
-    for r in results:
-        print(f"   - {r['course_id']}: {r['course_name']}")
+    for course_id, data in results.items():
+        print(f"   - {course_id}: {data['name']}")
+
+    print("\nCycle detection:")
+    cycles = detect_cycles()
+    if cycles:
+        print(f"  WARNING: Found {len(cycles)} prerequisite cycles!")
+        for cycle in cycles[:3]:
+            print(f"    {' -> '.join(cycle)}")
+    else:
+        print("  No cycles detected ✓")
 
     print("\nGraph Visualization Demo:")
     print("Getting Chemistry BS graph data...")
     graph_data = get_graph_data(major="7105")
-    print(f"Courses: {len(graph_data['nodes'])}")
+    print(f"Courses: {len(graph_data['nodes'])} (now dict-of-dicts)")
     print(f"Prerequisites: {len(graph_data['edges'])}")
+
+    print("\nBottleneck courses for major 7105:")
+    bottlenecks = get_bottleneck_courses(major="7105", top_n=5)
+    for course_id, data in bottlenecks.items():
+        print(f"  {course_id}: blocks {data['blocks']} courses")
 
     print("\nAnalyzing graph...")
     print_graph_analysis(graph_data, top_n=3)
 
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("Demo complete!")
-    print("="*70)
+    print("=" * 70)
 
 
 def help_quick():
@@ -986,59 +1144,59 @@ def help_quick():
     """
     help_text = """
     GETTING STARTED
-    
+
     import curriculum_core as api
-    
+
     # Load data (required first step)
     api.load_data("registrar.csv", "majors.xlsx")
-    
-    BASIC FUNCTIONS
-    
-    course = api.get_course("CSE 232")
-    prereqs = api.get_prerequisites("CSE 232")
-    dependents = api.get_dependent_courses("MTH 132")
-    results = api.search_courses("calculus")
+
+    BASIC FUNCTIONS (ALL RETURN DICT-OF-DICTS!)
+
+    course = api.get_course("CSE 232")  # Dict with course data
+    prereqs = api.get_prerequisites("CSE 232")  # {"CSE 231": {...}, "MTH 132": {...}}
+    prereq_details = api.get_prerequisite_details("CSE 232")  # AND/OR logic, depth
+    dependents = api.get_dependent_courses("MTH 132")  # {"MTH 234": {...}, ...}
+    results = api.search_courses("calculus")  # {"MTH 132": {...}, ...}
     stats = api.get_statistics()
-    
+
+    NEW FUNCTIONS
+
+    cycles = api.detect_cycles()  # Find circular prerequisites
+    bottlenecks = api.get_bottleneck_courses(major="7105")  # Critical path
+
     GRAPH FUNCTIONS
-    
-    graph = api.get_graph_data(major="7105")
-    majors = api.get_major_list()
-    
-    VISUALIZATION FUNCTIONS (NEW!)
-    
-    # Create and visualize graphs
-    G, pos = api.create_graph(graph_data, layout="hierarchical")
-    fig, ax, G, pos = api.visualize_graph(
-        graph_data, 
-        layout="hierarchical",
-        color_by="year",
-        save_path="chemistry_curriculum.png"
-    )
-    
-    # Analyze graphs
-    analysis = api.analyze_graph(graph_data)
-    api.print_graph_analysis(graph_data)
-    
+
+    graph = api.get_graph_data(major="7105")  # nodes now dict-of-dicts
+    majors = api.get_major_list()  # {"7105": {...}, ...}
+
     EXAMPLES
-    
-    # Get prerequisites
+
+    # Everything is dict-of-dicts now!
+    >>> courses = api.get_all_courses()
+    >>> cse232 = courses["CSE 232"]
+    >>> print(cse232["number"])  # 232 as int for sorting
+
+    # Prerequisites
     >>> prereqs = api.get_prerequisites("CSE 232")
-    >>> print(prereqs['formatted'])
-    (CMSE 202 or CSE 231) and (LB 118 or MTH 124 or MTH 132 or MTH 152H)
-    
-    # Visualize curriculum
-    >>> graph_data = api.get_graph_data(major="7105")
-    >>> api.visualize_graph(graph_data, layout="hierarchical", color_by="year")
-    
-    # Analyze curriculum structure
-    >>> analysis = api.analyze_graph(graph_data)
-    >>> print(f"Average prerequisite depth: {analysis['avg_depth']:.2f}")
-    
+    >>> for prereq_id, data in prereqs.items():
+    ...     print(f"{prereq_id}: {data['name']}")
+
+    # Get formatted prerequisite string
+    >>> details = api.get_prerequisite_details("CSE 232")
+    >>> print(details['formatted'])  # "(CSE 231 or CMSE 202) and MTH 132"
+
+    # Dependents
+    >>> deps = api.get_dependent_courses("MTH 132")
+    >>> print(f"MTH 132 is needed by {len(deps)} courses")
+
+    # Find bottlenecks
+    >>> bottlenecks = api.get_bottleneck_courses(major="7105", top_n=5)
+    >>> for course_id, data in bottlenecks.items():
+    ...     print(f"{course_id} blocks {data['blocks']} courses")
+
     MORE HELP
-    
-    help(api.visualize_graph)       # Detailed help for visualization
-    api.demo()                      # Run full demonstration
+
+    api.demo()
     """
     print(help_text)
 
@@ -1047,12 +1205,16 @@ __all__ = [
     'load_data',
     'get_course',
     'get_prerequisites',
+    'get_prerequisite_details',
     'get_dependent_courses',
+    'get_all_courses',
     'search_courses',
     'get_courses_by_subject',
     'get_statistics',
     'get_graph_data',
     'get_major_list',
+    'detect_cycles',
+    'get_bottleneck_courses',
     'create_graph',
     'visualize_graph',
     'analyze_graph',
@@ -1073,9 +1235,6 @@ if __name__ == "__main__":
     print("  api.visualize_graph(graph_data, layout='hierarchical')")
     print("\nTo see a demo:")
     print("  api.demo()")
-    print("\nFor quick help:")
-    print("  api.help_quick()")
-    print("\n" + "=" * 70)
     print("\nFor quick help:")
     print("  api.help_quick()")
     print("\n" + "=" * 70)
