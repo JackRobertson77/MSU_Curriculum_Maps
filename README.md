@@ -64,8 +64,10 @@ This project develops a robust and reusable system for **parsing, cleaning, and 
   
 ---
 
-## Project Plan Video
-Here is the link to our project plan video: https://mediaspace.msu.edu/media/MSU_Curriculum-CMSE495_Plan_Presentation_Video/1_ugrk2r6p
+## Project Videos
+Project Plan Video: https://mediaspace.msu.edu/media/MSU_Curriculum-CMSE495_Plan_Presentation_Video/1_ugrk2r6p
+
+Final Video: https://mediaspace.msu.edu/media/MSU+Curriculum+Maps+Final+Video/1_vzu7h80f
 
 ---
 ## Figure Reproducibility
