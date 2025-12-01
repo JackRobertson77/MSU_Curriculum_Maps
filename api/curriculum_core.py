@@ -578,7 +578,7 @@ def get_graph_data(
     Get graph data for visualization (nodes and edges).
 
     Args:
-        major: Optional major code to filter by (e.g., "7105")
+        major: Optional major code to filter by (e.g., "3576")
         max_depth: Optional maximum prerequisite depth to include
 
     Returns:
@@ -1156,12 +1156,12 @@ def demo():
 
     print("\nGraph Visualization Demo:")
     print("Getting Chemistry BS graph data...")
-    graph_data = get_graph_data(major="7105")
+    graph_data = get_graph_data(major="3576")
     print(f"Courses: {len(graph_data['nodes'])} (now dict-of-dicts)")
     print(f"Prerequisites: {len(graph_data['edges'])}")
 
-    print("\nBottleneck courses for major 7105:")
-    bottlenecks = get_bottleneck_courses(major="7105", top_n=5)
+    print("\nBottleneck courses for major 3576:")
+    bottlenecks = get_bottleneck_courses(major="3576", top_n=5)
     for course_id, data in bottlenecks.items():
         print(f"  {course_id}: blocks {data['blocks']} courses")
 
@@ -1197,12 +1197,12 @@ def help_quick():
     NEW FUNCTIONS
 
     cycles = api.detect_cycles()  # Find circular prerequisites
-    bottlenecks = api.get_bottleneck_courses(major="7105")  # Critical path
+    bottlenecks = api.get_bottleneck_courses(major="3576")  # Critical path
 
     GRAPH FUNCTIONS
 
-    graph = api.get_graph_data(major="7105")  # nodes now dict-of-dicts
-    majors = api.get_major_list()  # {"7105": {...}, ...}
+    graph = api.get_graph_data(major="3576")  # nodes now dict-of-dicts
+    majors = api.get_major_list()  # {"3576": {...}, ...}
 
     EXAMPLES
 
@@ -1225,7 +1225,7 @@ def help_quick():
     >>> print(f"MTH 132 is needed by {len(deps)} courses")
 
     # Find bottlenecks
-    >>> bottlenecks = api.get_bottleneck_courses(major="7105", top_n=5)
+    >>> bottlenecks = api.get_bottleneck_courses(major="3576", top_n=5)
     >>> for course_id, data in bottlenecks.items():
     ...     print(f"{course_id} blocks {data['blocks']} courses")
 
@@ -1266,7 +1266,7 @@ if __name__ == "__main__":
     print("  api.load_data('registrar.csv', 'majors.xlsx')")
     print("  api.get_prerequisites('CSE 232')")
     print("\nTo visualize a curriculum:")
-    print("  graph_data = api.get_graph_data(major='7105')")
+    print("  graph_data = api.get_graph_data(major='3576')")
     print("  api.visualize_graph(graph_data, layout='hierarchical')")
     print("\nTo see a demo:")
     print("  api.demo()")
