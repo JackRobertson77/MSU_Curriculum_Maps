@@ -1,8 +1,8 @@
 pandas
-matplotlib
+numpy
 networkx
+matplotlib
 pyvis
 openpyxl
-argparse
 jupyter
 notebook
