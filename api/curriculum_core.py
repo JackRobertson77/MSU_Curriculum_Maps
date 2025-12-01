@@ -4,6 +4,7 @@ MSU Curriculum Core API with Graph Visualization
 """
 
 import pandas as pd
+import numpy as np
 import re
 from collections import defaultdict, deque
 from pathlib import Path
@@ -675,14 +676,14 @@ def get_major_list() -> Dict[str, Dict]:
         raise RuntimeError("Data not loaded. Call load_data() first.")
 
     major_counts = _majors_df.groupby(
-        "Major").size().reset_index(name="courses")
+        ["Major", "Description"]).size().reset_index(name="courses")
 
     majors = {}
     for _, row in major_counts.iterrows():
         major_code = str(row["Major"])
+        major_name = str(row["Description"])
         majors[major_code] = {
-            # TODO: Add actual major names if available
-            "name": f"Major {major_code}",
+            "name": f"Major: {major_name}",
             "courses": int(row["courses"])
         }
 
@@ -779,6 +780,41 @@ def get_bottleneck_courses(
     )[:top_n])
 
     return sorted_bottlenecks
+
+
+def build_adjacency_mat(adj_list: Dict[str, List[str]] = None):
+    """
+    Build adjacency matrix in the form of a pandas dataframe to show prerequisite relationships.
+    Assumes edges prereq -> course.
+    Args:
+        adj_list: 
+    """
+
+    #set default to _forward_adj list from above
+    if adj_list is None:
+        global _forward_adj
+        adj_list = _forward_adj
+
+    #get unique course names
+    courses = sorted(set(adj_list.keys()) |
+                     {c for deps in adj_list.values() for c in deps})
+
+    #map out courses to an index
+    index_map = {c: i for i, c in enumerate(courses)}
+
+    #create empty matrix for adjacency matrix
+    N = len(courses)
+    mat = np.zeros((N, N), dtype=int)
+
+    #fill with 1s based on a relationship and 0s
+    for prereq, dependents in adj_list.items():
+        for course in dependents:
+            i = index_map[prereq]
+            j = index_map[course]
+            mat[i, j] = 1
+
+    #return as a pandas dataframe to easily read and understand
+    return pd.DataFrame(mat, index=courses, columns=courses)
 
 
 # ============================================================================
