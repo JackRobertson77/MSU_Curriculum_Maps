@@ -8,6 +8,15 @@ Go to install.md for intructions on how to run and install the program.
 
 ---
 
+## Navigating Through the Repository
+To get to our final product for this semester, head to the folder titled "api". In there is a file titled `API_Demo.ipynb` where you can run through a demo of our api. Data should already be present in the folder for everything to run properly.
+
+In the folder titled "webapi" is a look into the start of a possible UI for a directed graph by major. 
+
+In the folder titled "old_work" are some initial jupyter notebooks that were developed throughout the semester. Those notebooks go through some of the logic and thought processes we had throughout the course of the semester that led us to our final solution. 
+
+---
+
 ## Project Overview  
 This project develops a robust and reusable system for **parsing, cleaning, and visualizing course dependency data** at Michigan State University. The work focuses on transforming messy course prerequisite/co-requisite data into a **directed graph**, enabling analysis of curriculum structure and student pathways.  
 
