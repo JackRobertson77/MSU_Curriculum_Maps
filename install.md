@@ -39,10 +39,10 @@ In the terminal, run the command: jupyter lab
 ```bash
 jupyter lab
 ```
-This should open up jupyter lab in your browser. From there, go to INSTALL_AND_TEST.ipynb to make sure that all install steps went as planned. Once all tests pass, you will be directed to run through the tutorial in Graph.ipynb. 
+This should open up jupyter lab in your browser. To run a demo of our api, click into the folder titled "api." From there, go to `API_Demo.ipynb` which will take you through a quick demo of the differernt functions in our api, cell by cell. 
 
 
 ## 5 Quick troubleshooting (minimal)
-- Make sure you’re in the project root (the same folder as the script and fake CSVs).
+- Make sure you’re in the project root.
 - If imports fail when running the script, ensure you completed the install steps 
 - Re‑run steps **2–4** after fixing any issues.
