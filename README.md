@@ -85,7 +85,7 @@ Final Video: https://mediaspace.msu.edu/media/MSU+Curriculum+Maps+Final+Video/1_
 To reproduce the figures used in this project, open and run:
 - [`reproducibility.ipynb`](./reproducibility.ipynb)
 
-This notebook provides complete step-by-step instructions for generating the curriculum/prerequisite graph figure.
+This notebook provides complete step-by-step instructions for generating the curriculum/prerequisite graph figures used in our final presentation and video.
 ---
 
 ## License  
